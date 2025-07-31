@@ -12,9 +12,6 @@ config = Config()
 
 @xray_recorder.capture('handle_sqs_event')
 def handle_sqs_event(event: Dict[str, Any]) -> None:
-    """
-    Manipula eventos do SQS
-    """
     records = event.get('Records', [])
 
     for record in records:
@@ -31,7 +28,7 @@ def handle_sqs_event(event: Dict[str, Any]) -> None:
 
             config.logger.info(f"Mensagem SQS processada com sucesso: {record.get('messageId')}")
 
-        except Exception as e:
+        except BaseException as e:
             config.logger.error(f"Erro ao processar registro SQS: {str(e)}")
             # Relançar exceção para que a mensagem seja enviada para DLQ
             raise
@@ -67,7 +64,7 @@ def process_sqs_message(message: Dict[str, Any]) -> None:
 
         config.logger.info(f"Consolidado atualizado para {data_lancamento}")
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro ao processar mensagem SQS: {str(e)}")
         #raise ConsolidadoError(f"Erro no processamento: {str(e)}")
         raise f"Erro no processamento: {str(e)}"

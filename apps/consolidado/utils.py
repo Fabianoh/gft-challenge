@@ -191,7 +191,7 @@ def handle_http_request(event: Dict[str, Any]) -> Dict[str, Any]:
             'message': str(e)
         })
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro inesperado: {str(e)}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',

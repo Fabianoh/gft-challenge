@@ -38,7 +38,7 @@ class RelatorioConsolidado:
 @xray_recorder.capture('get_lancamentos_by_date_range')
 def get_lancamentos_by_date_range(data_inicio: str, data_fim: str) -> List[Dict[str, Any]]:
     try:
-        #TODO: criar índice na tabela e retirar o scan
+        # TODO: criar índice na tabela e retirar o scan
         response = config.tableLancamentos.scan(
             FilterExpression='#data BETWEEN :data_inicio AND :data_fim AND #status = :status',
             ExpressionAttributeNames={
@@ -61,9 +61,6 @@ def get_lancamentos_by_date_range(data_inicio: str, data_fim: str) -> List[Dict[
 
 @xray_recorder.capture('calculate_saldo_diario')
 def calculate_saldo_diario(data: str, saldo_anterior: Decimal = Decimal('0')) -> SaldoDiario:
-    """
-    Calcula saldo diário para uma data específica
-    """
     # Definir período (início e fim do dia)
     data_inicio = f"{data}T00:00:00"
     data_fim = f"{data}T23:59:59"
@@ -121,9 +118,6 @@ def save_saldo_diario(saldo: SaldoDiario) -> None:
 
 @xray_recorder.capture('get_saldo_diario')
 def get_saldo_diario(data: str, use_cache: bool = True) -> Optional[SaldoDiario]:
-    """
-    Recupera saldo diário do cache ou DynamoDB
-    """
     cache_key = f"saldo_diario:{data}:{config.environment}"
 
     # Tentar recuperar do cache primeiro
@@ -161,9 +155,6 @@ def get_saldo_diario(data: str, use_cache: bool = True) -> Optional[SaldoDiario]
 
 @xray_recorder.capture('get_saldo_anterior')
 def get_saldo_anterior(data: str) -> Decimal:
-    """
-    Recupera saldo final do dia anterior
-    """
     try:
         data_obj = datetime.fromisoformat(data)
         data_anterior = (data_obj - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -172,7 +163,7 @@ def get_saldo_anterior(data: str) -> Decimal:
         if saldo_anterior:
             return saldo_anterior.saldo_final
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao recuperar saldo anterior: {str(e)}")
 
     return Decimal('0')
@@ -241,17 +232,13 @@ def generate_relatorio_periodo(data_inicio: str, data_fim: str) -> RelatorioCons
 
         return relatorio
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro ao gerar relatório: {str(e)}")
-        #raise ConsolidadoError("Erro ao gerar relatório consolidado")
         raise "Erro ao gerar relatório consolidado"
 
 
 @xray_recorder.capture('save_relatorio_to_s3')
 def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
-    """
-    Salva relatório no S3 para backup/histórico
-    """
     try:
         # Preparar dados do relatório
         relatorio_data = {
@@ -279,15 +266,11 @@ def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
 
     except BaseException as e:
         config.logger.error(f"Erro ao salvar relatório no S3: {str(e)}")
-        #raise ConsolidadoError("Erro ao salvar relatório")
         raise "Erro ao salvar relatório"
 
 
 @xray_recorder.capture('recalculate_subsequent_balances')
 def recalculate_subsequent_balances(data_inicio: str, max_days: int = 30) -> None:
-    """
-    Recalcula saldos dos dias seguintes após uma alteração
-    """
     try:
         data_obj = datetime.fromisoformat(data_inicio)
 
@@ -306,7 +289,7 @@ def recalculate_subsequent_balances(data_inicio: str, max_days: int = 30) -> Non
             # Invalidar cache
             invalidate_cache(f"saldo_diario:{data_atual}:*")
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao recalcular saldos subsequentes: {str(e)}")
 
 
@@ -320,5 +303,5 @@ def has_lancamentos_for_date(data: str) -> bool:
     try:
         lancamentos = get_lancamentos_by_date_range(data_inicio, data_fim)
         return len(lancamentos) > 0
-    except Exception:
+    except BaseException:
         return False

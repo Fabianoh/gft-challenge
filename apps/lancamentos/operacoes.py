@@ -61,7 +61,7 @@ def cria_lancamento(event: Dict[str, Any]) -> Dict[str, Any]:
         config.logger.info(f"Lançamento processado com sucesso: {lancamento_id}")
         return create_response(201, response_body)
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro inesperado: {e}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',
@@ -136,7 +136,7 @@ def get_lancamentos_list(event: Dict[str, Any]) -> Dict[str, Any]:
         })
 
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro ao listar lançamentos: {e}")
         return create_response(500, {
             'error': 'Erro interno',
@@ -178,7 +178,7 @@ def get_lancamento_individual(event: Dict[str, Any]) -> Dict[str, Any]:
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro ao buscar lançamento individual: {e}")
         return create_response(500, {
             'error': 'Erro interno',
