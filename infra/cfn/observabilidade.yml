@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String  
+  NotificationTopic:
+    Type: String
+  ApiGateway:
+    Type: String
+  LambdaLancamentos:
+    Type: String
+  LambdaConsolidado:
+    Type: String  
+  DynamoDBLancamentos:
+    Type: String
+  DynamoDBConsolidado:
+    Type: String
+  ConsolidacaoQueue:
+    Type: String
+  
+
+Resources:
+  LambdaLancamentosErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-lambda-lancamentos-errors'
+      AlarmDescription: 'Alarme para erros na Lambda de Lançamentos'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaLancamentos
+
+  LambdaConsolidadoErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-lambda-consolidado-errors'
+      AlarmDescription: 'Alarme para erros na Lambda de Consolidado'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaConsolidado
+
+  APIGateway4XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-4xx-errors'
+      AlarmDescription: 'Alarme para erros 4XX no API Gateway'
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref ApiGateway
+        - Name: Stage
+          Value: !Ref Environment
+
+  APIGateway5XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-5xx-errors'
+      AlarmDescription: 'Alarme para erros 5XX no API Gateway'
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref ApiGateway
+        - Name: Stage
+          Value: !Ref Environment
+
+  APIGatewayLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-api-latency'
+      AlarmDescription: 'Alarme para alta latência no API Gateway'
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref ApiGateway
+        - Name: Stage
+          Value: !Ref Environment
+
+  DynamoDBThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-dynamodb-throttles'
+      AlarmDescription: 'Alarme para throttling no DynamoDB'
+      MetricName: ThrottledRequests
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: TableName
+          Value: !Ref DynamoDBLancamentos
+
+
+  SQSQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-sqs-queue-depth'
+      AlarmDescription: 'Alarme para acúmulo de mensagens na fila SQS'
+      MetricName: ApproximateNumberOfVisibleMessages
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: QueueName
+          Value: !Ref ConsolidacaoQueue
+
+  # Dashboard personalizado
+  CloudWatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${ProjectName}-${Environment}-dashboard'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${LambdaLancamentos}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Lançamentos - Métricas",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${LambdaConsolidado}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Consolidado - Métricas",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${ApiGateway}", "Stage", "${Environment}" ],
+                  [ ".", "4XXError", ".", ".", ".", "." ],
+                  [ ".", "5XXError", ".", ".", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway - Requests e Errors",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${DynamoDBLancamentos}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ],
+                  [ ".", "ConsumedReadCapacityUnits", "TableName", "${DynamoDBConsolidado}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB - Capacidade Consumida",
+                "period": 300
+              }
+            }
+          ]
+        }
+
+
+# Outputs:

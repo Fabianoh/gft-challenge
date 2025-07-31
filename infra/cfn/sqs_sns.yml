@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+  KMSKey:
+    Type: String
+  AlertEmail:
+    Type: String
+
+Resources:
+  ConsolidacaoQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-consolidacao-queue'
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600  # 14 dias
+      ReceiveMessageWaitTimeSeconds: 20  # Long polling
+      KmsMasterKeyId: !Ref KMSKey
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ConsolidacaoDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-consolidacao-queue'
+        - Key: Environment
+          Value: !Ref Environment
+
+  ConsolidacaoDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-consolidacao-dlq'
+      MessageRetentionPeriod: 1209600  # 14 dias
+      KmsMasterKeyId: !Ref KMSKey
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-consolidacao-dlq'
+        - Key: Environment
+          Value: !Ref Environment
+
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-${Environment}-notifications'
+      KmsMasterKeyId: !Ref KMSKey
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-notifications'
+        - Key: Environment
+          Value: !Ref Environment
+
+  NotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref NotificationTopic
+      Endpoint: !Ref AlertEmail
+
+Outputs:
+  NotificationTopic:
+    Value: !Ref NotificationTopic
+
+  ConsolidacaoQueueName:
+    Value:
+      Ref: ConsolidacaoQueue
+
+  ConsolidacaoQueue:
+    Value:
+      Fn::GetAtt: ConsolidacaoQueue.Arn
+
+  ConsolidacaoDeadLetterQueue:
+    Value:
+      Fn::GetAtt: ConsolidacaoDeadLetterQueue.Arn

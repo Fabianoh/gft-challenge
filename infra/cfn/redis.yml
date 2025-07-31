@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+  PrivateSubnet1:
+    Type: String
+  PrivateSubnet2:
+    Type: String
+  CacheSecurityGroup:
+    Type: String
+  CacheNodeType:
+    Type: String
+
+Resources:
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: 'Subnet group para Redis cluster'
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: Replication Group for Redis
+      ReplicationGroupId: !Sub '${ProjectName}-${Environment}-redis'
+      CacheNodeType: !Ref CacheNodeType
+      Port: 6379
+      NumCacheClusters: 2
+      Engine: redis
+      EngineVersion: '7.0'
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      SecurityGroupIds:
+        - !Ref CacheSecurityGroup
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+      MultiAZEnabled: true
+      AutomaticFailoverEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-redis'
+        - Key: Environment
+          Value: !Ref Environment
+    DependsOn:
+      - CacheSubnetGroup
+
+Outputs:
+  RedisEndpoint:
+    Value:
+      Fn::GetAtt:
+        - RedisCluster
+        - PrimaryEndPoint.Address
+
+  RedisPort:
+    Value:
+      Fn::GetAtt:
+        - RedisCluster
+        - PrimaryEndPoint.Port

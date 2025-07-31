@@ -1,0 +1,340 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Desafio para oportunidade de arquiteto de soluções GFT
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Nome do projeto
+    Default: gft-challenge-fluxo-caixa
+  
+  Environment:
+    Type: String
+    Description: Nome do Ambiente
+    Default: dev
+
+  CidrBlock:
+    Type: String
+    Default: '10.0.0.0/16'
+
+  AlertEmail:
+    Type: String
+
+  CacheNodeType:
+      Type: String
+      Default: 'cache.t3.micro'
+      AllowedValues: ['cache.t3.micro', 'cache.t3.small', 'cache.t3.medium']
+      Description: 'Tipo de instância do ElastiCache'
+
+Resources:
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/network.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        CidrBlock:
+          Ref: CidrBlock
+
+  SecurityGroupsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/securitygroup.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        VPC:
+          Fn::GetAtt:
+            - NetworkStack
+            - Outputs.VPCID
+    DependsOn:
+      - NetworkStack
+
+  KmsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/kms.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+
+  DynamodbStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/dynamodb.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsID
+    DependsOn: 
+      - KmsStack
+
+  S3bucketsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/buckets.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsID
+    DependsOn: 
+      - KmsStack
+
+  SQSSNSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/sqs_sns.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsID
+        AlertEmail:
+          Ref: AlertEmail
+    DependsOn: 
+      - KmsStack
+
+  RedisStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/redis.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        PrivateSubnet1:
+          Fn::GetAtt:
+            - NetworkStack
+            - Outputs.PrivateSubnet1
+        PrivateSubnet2:
+          Fn::GetAtt:
+            - NetworkStack
+            - Outputs.PrivateSubnet2
+        CacheSecurityGroup:
+          Fn::GetAtt:
+            - SecurityGroupsStack
+            - Outputs.CacheSecurityGroup
+        CacheNodeType: !Ref CacheNodeType
+    DependsOn: 
+      - SecurityGroupsStack
+
+  Secretstack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/secrets.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsID
+        RedisEndpoint:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisEndpoint
+        RedisPort:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisPort
+    DependsOn:
+      - RedisStack
+      - KmsStack
+  
+  Lambdastack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/lambdas.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsID
+        PrivateSubnet1:
+          Fn::GetAtt:
+            - NetworkStack
+            - Outputs.PrivateSubnet1
+        PrivateSubnet2:
+          Fn::GetAtt:
+            - NetworkStack
+            - Outputs.PrivateSubnet2
+        DynamoDBLancamentos:
+          Fn::GetAtt:
+            - DynamodbStack
+            - Outputs.DynamoDBLancamentos
+        DynamoDBConsolidado:
+          Fn::GetAtt:
+            - DynamodbStack
+            - Outputs.DynamoDBConsolidado
+        ConsolidacaoQueueName:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoQueueName
+        ConsolidacaoQueueArn:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoQueue
+        ConsolidacaoQueueDlqArn:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoDeadLetterQueue
+        S3Bucket:
+          Fn::GetAtt:
+            - S3bucketsStack
+            - Outputs.S3Bucket
+        KMSKeyArn:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsArn
+        DatabaseSecret:
+          Fn::GetAtt:
+            - Secretstack
+            - Outputs.DatabaseSecret
+        RedisEndpoint:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisEndpoint
+        RedisPort:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisPort
+        LambdaSecurityGroup:
+          Fn::GetAtt:
+            - SecurityGroupsStack
+            - Outputs.LambdaSecurityGroup
+    DependsOn:                
+      - DynamodbStack
+      - SQSSNSStack
+      - S3bucketsStack
+      - Secretstack
+
+  ApiGatewayStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/apigateway.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        KMSKey:
+          Fn::GetAtt:
+            - KmsStack
+            - Outputs.KmsArn
+        RedisEndpoint:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisEndpoint
+        RedisPort:
+          Fn::GetAtt:
+            - RedisStack
+            - Outputs.RedisPort
+        LambdaConsolidadoArn:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaConsolidadoArn
+        LambdaLancamentosArn:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaLancamentosArn        
+    DependsOn:
+      - Lambdastack
+  
+  ObservabilityStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - ApiGatewayStack
+    Properties:
+      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/observabilidade.yml"
+      Parameters:
+        ProjectName: 
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+        NotificationTopic:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.NotificationTopic
+        ApiGateway:
+          Fn::GetAtt: 
+            - ApiGatewayStack
+            - Outputs.ApiGatewayID
+        LambdaConsolidado:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaConsolidadoArn
+        LambdaLancamentos:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaLancamentosArn
+        DynamoDBLancamentos:
+          Fn::GetAtt:
+            - DynamodbStack
+            - Outputs.DynamoDBLancamentos
+        DynamoDBConsolidado:
+          Fn::GetAtt:
+            - DynamodbStack
+            - Outputs.DynamoDBConsolidado
+        ConsolidacaoQueue:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoQueue
+
+Outputs:
+  ApiGatewayUrl:
+    Value:
+      Fn::GetAtt: 
+        - ApiGatewayStack
+        - Outputs.ApiGatewayUrl
+
+  HealthCheckEndpoint:
+    Description: 'Endpoint para health check (GET)'
+    Value:
+      Fn::GetAtt: 
+        - ApiGatewayStack
+        - Outputs.HealthCheckEndpoint
+
+  LancamentosEndpoint:
+    Description: 'Endpoint para criar lançamentos (POST)'
+    Value:
+      Fn::GetAtt: 
+        - ApiGatewayStack
+        - Outputs.LancamentosEndpoint
+
+  ConsolidadoEndpoint:
+    Description: 'Endpoint para consultar consolidado (GET)'
+    Value:
+      Fn::GetAtt: 
+        - ApiGatewayStack
+        - Outputs.ConsolidadoEndpoint  
+
+  # CloudWatchDashboardUrl:
+  #   Description: 'URL do Dashboard CloudWatch'
+  #   Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ProjectName}-${Environment}-dashboard'

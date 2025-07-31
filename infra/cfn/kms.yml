@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+
+Resources:
+  KMSKey:
+      Type: AWS::KMS::Key
+      Properties:
+        Description: 'Chave de criptografia para o sistema de controle de fluxo de caixa'
+        KeyPolicy:
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              Action: 'kms:*'
+              Resource: '*'
+            - Effect: Allow
+              Principal:
+                Service:
+                  - dynamodb.amazonaws.com
+                  - s3.amazonaws.com
+                  - sqs.amazonaws.com
+                  - logs.amazonaws.com
+              Action:
+                - 'kms:Decrypt'
+                - 'kms:GenerateDataKey'
+              Resource: '*'
+
+  KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${ProjectName}-${Environment}-key'
+      TargetKeyId: !Ref KMSKey
+    DependsOn:
+      - KMSKey
+
+Outputs:
+  KmsID:
+    Value:
+      Ref: KMSKey
+  
+  KmsArn:
+    Value:
+      Fn::GetAtt:
+        - KMSKey
+        - Arn
+  
+  KmsAlias:
+    Value:
+      Ref: KMSKeyAlias

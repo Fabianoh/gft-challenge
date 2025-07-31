@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+  KMSKey:
+    Type: String
+
+Resources:
+  DynamoDBLancamentos:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-lancamentos'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: data
+          AttributeType: S
+        - AttributeName: tipo
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: data-tipo-index
+          KeySchema:
+            - AttributeName: data
+              KeyType: HASH
+            - AttributeName: tipo
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEType: "KMS"
+        SSEEnabled: true
+        KMSMasterKeyId: !Ref KMSKey
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-lancamentos'
+        - Key: Environment
+          Value: !Ref Environment
+
+  DynamoDBConsolidado:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-consolidado'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: data
+          AttributeType: S
+      KeySchema:
+        - AttributeName: data
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: "KMS"
+        KMSMasterKeyId: !Ref KMSKey
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-consolidado'
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  DynamoDBLancamentos:
+    Value: 
+      Ref: DynamoDBLancamentos
+
+  DynamoDBConsolidado:
+    Value: 
+      Ref: DynamoDBConsolidado
