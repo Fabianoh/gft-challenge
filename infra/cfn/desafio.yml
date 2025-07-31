@@ -1,0 +1,1336 @@
+# # ===== CLOUDWATCH ALARMS =====
+#   LambdaLancamentosErrorAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-lambda-lancamentos-errors'
+#       AlarmDescription: 'Alarme para erros na Lambda de Lançamentos'
+#       MetricName: Errors
+#       Namespace: AWS/Lambda
+#       Statistic: Sum
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 5
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: FunctionName
+#           Value: !Ref LambdaLancamentos
+
+#   LambdaConsolidadoErrorAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-lambda-consolidado-errors'
+#       AlarmDescription: 'Alarme para erros na Lambda de Consolidado'
+#       MetricName: Errors
+#       Namespace: AWS/Lambda
+#       Statistic: Sum
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 5
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: FunctionName
+#           Value: !Ref LambdaConsolidado
+
+#   APIGateway4XXErrorAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-api-4xx-errors'
+#       AlarmDescription: 'Alarme para erros 4XX no API Gateway'
+#       MetricName: 4XXError
+#       Namespace: AWS/ApiGateway
+#       Statistic: Sum
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 10
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: ApiName
+#           Value: !Ref ApiGateway
+#         - Name: Stage
+#           Value: !Ref Environment
+
+#   APIGateway5XXErrorAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-api-5xx-errors'
+#       AlarmDescription: 'Alarme para erros 5XX no API Gateway'
+#       MetricName: 5XXError
+#       Namespace: AWS/ApiGateway
+#       Statistic: Sum
+#       Period: 300
+#       EvaluationPeriods: 1
+#       Threshold: 3
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: ApiName
+#           Value: !Ref ApiGateway
+#         - Name: Stage
+#           Value: !Ref Environment
+
+#   APIGatewayLatencyAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-api-latency'
+#       AlarmDescription: 'Alarme para alta latência no API Gateway'
+#       MetricName: Latency
+#       Namespace: AWS/ApiGateway
+#       Statistic: Average
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 10000
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: ApiName
+#           Value: !Ref ApiGateway
+#         - Name: Stage
+#           Value: !Ref Environment
+
+#   DynamoDBThrottleAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-dynamodb-throttles'
+#       AlarmDescription: 'Alarme para throttling no DynamoDB'
+#       MetricName: ThrottledRequests
+#       Namespace: AWS/DynamoDB
+#       Statistic: Sum
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 10
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: TableName
+#           Value: !Ref DynamoDBLancamentos
+
+#   SQSQueueDepthAlarm:
+#     Type: AWS::CloudWatch::Alarm
+#     Properties:
+#       AlarmName: !Sub '${ProjectName}-${Environment}-sqs-queue-depth'
+#       AlarmDescription: 'Alarme para acúmulo de mensagens na fila SQS'
+#       MetricName: ApproximateNumberOfVisibleMessages
+#       Namespace: AWS/SQS
+#       Statistic: Average
+#       Period: 300
+#       EvaluationPeriods: 2
+#       Threshold: 100
+#       ComparisonOperator: GreaterThanThreshold
+#       AlarmActions:
+#         - !Ref NotificationTopic
+#       Dimensions:
+#         - Name: QueueName
+#           Value: !GetAtt ConsolidacaoQueue.QueueName
+
+#   # Dashboard personalizado
+#   CloudWatchDashboard:
+#     Type: AWS::CloudWatch::Dashboard
+#     Properties:
+#       DashboardName: !Sub '${ProjectName}-${Environment}-dashboard'
+#       DashboardBody: !Sub |
+#         {
+#           "widgets": [
+#             {
+#               "type": "metric",
+#               "x": 0,
+#               "y": 0,
+#               "width": 12,
+#               "height": 6,
+#               "properties": {
+#                 "metrics": [
+#                   [ "AWS/Lambda", "Invocations", "FunctionName", "${LambdaLancamentos}" ],
+#                   [ ".", "Errors", ".", "." ],
+#                   [ ".", "Duration", ".", "." ]
+#                 ],
+#                 "view": "timeSeries",
+#                 "stacked": false,
+#                 "region": "${AWS::Region}",
+#                 "title": "Lambda Lançamentos - Métricas",
+#                 "period": 300
+#               }
+#             },
+#             {
+#               "type": "metric",
+#               "x": 12,
+#               "y": 0,
+#               "width": 12,
+#               "height": 6,
+#               "properties": {
+#                 "metrics": [
+#                   [ "AWS/Lambda", "Invocations", "FunctionName", "${LambdaConsolidado}" ],
+#                   [ ".", "Errors", ".", "." ],
+#                   [ ".", "Duration", ".", "." ]
+#                 ],
+#                 "view": "timeSeries",
+#                 "stacked": false,
+#                 "region": "${AWS::Region}",
+#                 "title": "Lambda Consolidado - Métricas",
+#                 "period": 300
+#               }
+#             },
+#             {
+#               "type": "metric",
+#               "x": 0,
+#               "y": 6,
+#               "width": 12,
+#               "height": 6,
+#               "properties": {
+#                 "metrics": [
+#                   [ "AWS/ApiGateway", "Count", "ApiName", "${ApiGateway}", "Stage", "${Environment}" ],
+#                   [ ".", "4XXError", ".", ".", ".", "." ],
+#                   [ ".", "5XXError", ".", ".", ".", "." ]
+#                 ],
+#                 "view": "timeSeries",
+#                 "stacked": false,
+#                 "region": "${AWS::Region}",
+#                 "title": "API Gateway - Requests e Errors",
+#                 "period": 300
+#               }
+#             },
+#             {
+#               "type": "metric",
+#               "x": 12,
+#               "y": 6,
+#               "width": 12,
+#               "height": 6,
+#               "properties": {
+#                 "metrics": [
+#                   [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${DynamoDBLancamentos}" ],
+#                   [ ".", "ConsumedWriteCapacityUnits", ".", "." ],
+#                   [ ".", "ConsumedReadCapacityUnits", "TableName", "${DynamoDBConsolidado}" ],
+#                   [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+#                 ],
+#                 "view": "timeSeries",
+#                 "stacked": false,
+#                 "region": "${AWS::Region}",
+#                 "title": "DynamoDB - Capacidade Consumida",
+#                 "period": 300
+#               }
+#             }
+#           ]
+#         }
+
+  Outputs:
+    VPCId:
+      Description: 'ID da VPC criada'
+      Value: !Ref VPC
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-vpc-id'
+
+    ApiGatewayUrl:
+      Description: 'URL base do API Gateway'
+      Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-api-url'
+
+    ApiGatewayId:
+      Description: 'ID do API Gateway'
+      Value: !Ref ApiGateway
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-api-id'
+
+    LambdaLancamentosArn:
+      Description: 'ARN da Lambda de Lançamentos'
+      Value: !GetAtt LambdaLancamentos.Arn
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-lambda-lancamentos-arn'
+
+    LambdaConsolidadoArn:
+      Description: 'ARN da Lambda de Consolidado'
+      Value: !GetAtt LambdaConsolidado.Arn
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-lambda-consolidado-arn'
+
+    DynamoDBLancamentosTable:
+      Description: 'Nome da tabela DynamoDB de Lançamentos'
+      Value: !Ref DynamoDBLancamentos
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-dynamodb-lancamentos'
+
+    DynamoDBConsolidadoTable:
+      Description: 'Nome da tabela DynamoDB de Consolidado'
+      Value: !Ref DynamoDBConsolidado
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-dynamodb-consolidado'
+
+    SQSQueueUrl:
+      Description: 'URL da fila SQS'
+      Value: !Ref ConsolidacaoQueue
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-sqs-url'
+
+    RedisEndpoint:
+      Description: 'Endpoint do cluster Redis'
+      Value: !GetAtt RedisCluster.RedisEndpoint.Address
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-redis-endpoint'
+
+    S3BucketName:
+      Description: 'Nome do bucket S3'
+      Value: !Ref S3Bucket
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-s3-bucket'
+
+    KMSKeyId:
+      Description: 'ID da chave KMS'
+      Value: !Ref KMSKey
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-kms-key'
+
+    WebACLArn:
+      Description: 'ARN do WAF WebACL'
+      Value: !GetAtt WebACL.Arn
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-waf-arn'
+
+    CloudWatchDashboardUrl:
+      Description: 'URL do Dashboard CloudWatch'
+      Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ProjectName}-${Environment}-dashboard'
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-dashboard-url'
+
+    NotificationTopicArn:
+      Description: 'ARN do tópico SNS para notificações'
+      Value: !Ref NotificationTopic
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-notification-topic'
+
+    # URLs de teste
+    LancamentosEndpoint:
+      Description: 'Endpoint para criar lançamentos (POST)'
+      Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/lancamentos'
+
+    ConsolidadoEndpoint:
+      Description: 'Endpoint para consultar consolidado (GET)'
+      Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/consolidado'
+
+    HealthCheckEndpoint:
+      Description: 'Endpoint para health check (GET)'
+      Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/health'AWSTemplateFormatVersion: '2010-09-09'
+  Description: 'Infraestrutura completa para Sistema de Controle de Fluxo de Caixa - Arquitetura Microsserviços'
+
+  Parameters:
+    Environment:
+      Type: String
+      Default: 'dev'
+      AllowedValues: ['dev', 'staging', 'prod']
+      Description: 'Ambiente de deploy'
+    
+    ProjectName:
+      Type: String
+      Default: 'controle-fluxo-caixa'
+      Description: 'Nome do projeto para nomenclatura de recursos'
+    
+    AlertEmail:
+      Type: String
+      Default: 'admin@empresa.com'
+      Description: 'Email para receber alertas de monitoramento'
+      AllowedPattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    
+    CacheNodeType:
+      Type: String
+      Default: 'cache.t3.micro'
+      AllowedValues: ['cache.t3.micro', 'cache.t3.small', 'cache.t3.medium']
+      Description: 'Tipo de instância do ElastiCache'
+
+  Resources:
+    # ===== VPC E NETWORKING =====
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: '10.0.0.0/16'
+        EnableDnsHostnames: true
+        EnableDnsSupport: true
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-vpc'
+          - Key: Environment
+            Value: !Ref Environment
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-igw'
+
+    AttachGateway:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    # Removidas subnets públicas - não necessárias sem ALB
+
+    PrivateSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: '10.0.1.0/24'
+        AvailabilityZone: !Select [0, !GetAZs '']
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-private-subnet-1'
+
+    PrivateSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: '10.0.2.0/24'
+        AvailabilityZone: !Select [1, !GetAZs '']
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-private-subnet-2'
+
+    # NAT Gateway para acesso de saída dos Lambdas
+    NATGateway1EIP:
+      Type: AWS::EC2::EIP
+      DependsOn: AttachGateway
+      Properties:
+        Domain: vpc
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-nat-eip-1'
+
+    NATGateway1:
+      Type: AWS::EC2::NatGateway
+      Properties:
+        AllocationId: !GetAtt NATGateway1EIP.AllocationId
+        SubnetId: !Ref PublicSubnetForNAT
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-nat-1'
+
+    PublicSubnetForNAT:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: '10.0.3.0/24'
+        AvailabilityZone: !Select [0, !GetAZs '']
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-nat-subnet'
+
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-private-rt'
+
+    PrivateRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: '0.0.0.0/0'
+        NatGatewayId: !Ref NATGateway1
+
+    PrivateSubnetRouteTableAssociation1:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PrivateSubnet1
+        RouteTableId: !Ref PrivateRouteTable
+
+    PrivateSubnetRouteTableAssociation2:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PrivateSubnet2
+        RouteTableId: !Ref PrivateRouteTable
+
+    PublicRouteTableForNAT:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-nat-public-rt'
+
+    PublicRouteForNAT:
+      Type: AWS::EC2::Route
+      DependsOn: AttachGateway
+      Properties:
+        RouteTableId: !Ref PublicRouteTableForNAT
+        DestinationCidrBlock: '0.0.0.0/0'
+        GatewayId: !Ref InternetGateway
+
+    PublicSubnetForNATRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PublicSubnetForNAT
+        RouteTableId: !Ref PublicRouteTableForNAT
+
+    # ===== SECURITY GROUPS =====
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: 'Security Group para Lambda Functions'
+        VpcId: !Ref VPC
+        SecurityGroupEgress:
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '0.0.0.0/0'
+            Description: 'HTTPS para AWS Services'
+          - IpProtocol: tcp
+            FromPort: 6379
+            ToPort: 6379
+            DestinationSecurityGroupId: !Ref CacheSecurityGroup
+            Description: 'Redis Access'
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-lambda-sg'
+
+    CacheSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: 'Security Group para ElastiCache'
+        VpcId: !Ref VPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 6379
+            ToPort: 6379
+            SourceSecurityGroupId: !Ref LambdaSecurityGroup
+            Description: 'Access from Lambda'
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-cache-sg'
+
+    # VPC Endpoint para DynamoDB (reduz custos NAT Gateway)
+    DynamoDBVPCEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        VpcId: !Ref VPC
+        ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+        VpcEndpointType: Gateway
+        RouteTableIds:
+          - !Ref PrivateRouteTable
+
+    # VPC Endpoint para S3
+    S3VPCEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        VpcId: !Ref VPC
+        ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+        VpcEndpointType: Gateway
+        RouteTableIds:
+          - !Ref PrivateRouteTable
+
+    # ===== KMS ENCRYPTION =====
+    KMSKey:
+      Type: AWS::KMS::Key
+      Properties:
+        Description: 'Chave de criptografia para o sistema de controle de fluxo de caixa'
+        KeyPolicy:
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              Action: 'kms:*'
+              Resource: '*'
+            - Effect: Allow
+              Principal:
+                Service:
+                  - dynamodb.amazonaws.com
+                  - s3.amazonaws.com
+                  - sqs.amazonaws.com
+                  - logs.amazonaws.com
+              Action:
+                - 'kms:Decrypt'
+                - 'kms:GenerateDataKey'
+              Resource: '*'
+
+    KMSKeyAlias:
+      Type: AWS::KMS::Alias
+      Properties:
+        AliasName: !Sub 'alias/${ProjectName}-${Environment}-key'
+        TargetKeyId: !Ref KMSKey
+
+    # ===== DYNAMODB TABLES =====
+    DynamoDBLancamentos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: !Sub '${ProjectName}-${Environment}-lancamentos'
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: data
+            AttributeType: S
+          - AttributeName: tipo
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: data-tipo-index
+            KeySchema:
+              - AttributeName: data
+                KeyType: HASH
+              - AttributeName: tipo
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+          KMSMasterKeyId: !Ref KMSKey
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-lancamentos'
+          - Key: Environment
+            Value: !Ref Environment
+
+    DynamoDBConsolidado:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: !Sub '${ProjectName}-${Environment}-consolidado'
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: data
+            AttributeType: S
+        KeySchema:
+          - AttributeName: data
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+          KMSMasterKeyId: !Ref KMSKey
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-consolidado'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== ELASTICACHE REDIS =====
+    CacheSubnetGroup:
+      Type: AWS::ElastiCache::SubnetGroup
+      Properties:
+        Description: 'Subnet group para Redis cluster'
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+
+    RedisCluster:
+      Type: AWS::ElastiCache::ReplicationGroup
+      Properties:
+        ReplicationGroupId: !Sub '${ProjectName}-${Environment}-redis'
+        Description: 'Redis cluster para cache de consultas'
+        NodeType: !Ref CacheNodeType
+        Port: 6379
+        NumCacheClusters: 2
+        Engine: redis
+        EngineVersion: '7.0'
+        CacheSubnetGroupName: !Ref CacheSubnetGroup
+        SecurityGroupIds:
+          - !Ref CacheSecurityGroup
+        AtRestEncryptionEnabled: true
+        TransitEncryptionEnabled: true
+        MultiAZEnabled: true
+        AutomaticFailoverEnabled: true
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-redis'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== S3 BUCKET =====
+    S3Bucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub '${ProjectName}-${Environment}-reports-${AWS::AccountId}'
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: aws:kms
+                KMSMasterKeyID: !Ref KMSKey
+        VersioningConfiguration:
+          Status: Enabled
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldVersions
+              Status: Enabled
+              NoncurrentVersionExpirationInDays: 30
+            - Id: ArchiveOldReports
+              Status: Enabled
+              ExpirationInDays: 365
+              Transitions:
+                - TransitionInDays: 30
+                  StorageClass: STANDARD_IA
+                - TransitionInDays: 90
+                  StorageClass: GLACIER
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-reports'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== SQS QUEUE =====
+    ConsolidacaoQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: !Sub '${ProjectName}-${Environment}-consolidacao-queue'
+        VisibilityTimeoutSeconds: 300
+        MessageRetentionPeriod: 1209600  # 14 dias
+        ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        KmsMasterKeyId: !Ref KMSKey
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ConsolidacaoDeadLetterQueue.Arn
+          maxReceiveCount: 3
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-consolidacao-queue'
+          - Key: Environment
+            Value: !Ref Environment
+
+    ConsolidacaoDeadLetterQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: !Sub '${ProjectName}-${Environment}-consolidacao-dlq'
+        MessageRetentionPeriod: 1209600  # 14 dias
+        KmsMasterKeyId: !Ref KMSKey
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-consolidacao-dlq'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== SNS TOPIC =====
+    NotificationTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: !Sub '${ProjectName}-${Environment}-notifications'
+        KmsMasterKeyId: !Ref KMSKey
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-notifications'
+          - Key: Environment
+            Value: !Ref Environment
+
+    NotificationSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: email
+        TopicArn: !Ref NotificationTopic
+        Endpoint: !Ref AlertEmail
+
+    # ===== EVENTBRIDGE =====
+    # EventBridge:
+    #   Type: AWS::Events::Rule
+    #   Properties:
+    #     Name: !Sub '${ProjectName}-${Environment}-lancamento-events'
+    #     Description: 'Regra para eventos de lançamentos'
+    #     EventPattern:
+    #       source:
+    #         - !Sub '${ProjectName}.lancamentos'
+    #       detail-type:
+    #         - 'Lancamento Criado'
+    #         - 'Lancamento Atualizado'
+    #     State: ENABLED
+    #     Targets:
+    #       - Arn: !Ref NotificationTopic
+    #         Id: 'NotificationTarget'
+
+    # ===== IAM ROLES =====
+    LambdaExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: !Sub '${ProjectName}-${Environment}-lambda-role'
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+          - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+        Policies:
+          - PolicyName: DynamoDBAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                    - dynamodb:Query
+                    - dynamodb:Scan
+                  Resource:
+                    - !GetAtt DynamoDBLancamentos.Arn
+                    - !GetAtt DynamoDBConsolidado.Arn
+                    - !Sub '${DynamoDBLancamentos.Arn}/index/*'
+          - PolicyName: SQSAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:SendMessage
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                  Resource:
+                    - !GetAtt ConsolidacaoQueue.Arn
+          - PolicyName: S3Access
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:DeleteObject
+                  Resource: !Sub '${S3Bucket}/*'
+          - PolicyName: EventBridgeAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - events:PutEvents
+                  Resource: '*'
+          - PolicyName: KMSAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - kms:Decrypt
+                    - kms:GenerateDataKey
+                  Resource: !GetAtt KMSKey.Arn
+          - PolicyName: SecretsManagerAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref DatabaseSecret
+
+    APIGatewayRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: !Sub '${ProjectName}-${Environment}-apigateway-role'
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: apigateway.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+        Policies:
+          - PolicyName: LambdaInvokeAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - lambda:InvokeFunction
+                  Resource:
+                    - !GetAtt LambdaLancamentos.Arn
+                    - !GetAtt LambdaConsolidado.Arn
+
+    # ===== SECRETS MANAGER =====
+    DatabaseSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: !Sub '${ProjectName}/${Environment}/database'
+        Description: 'Credenciais e configurações do banco de dados'
+        SecretString: !Sub |
+          {
+            "redis_endpoint": "${RedisCluster.RedisEndpoint.Address}",
+            "redis_port": "${RedisCluster.RedisEndpoint.Port}",
+            "kms_key_id": "${KMSKey}",
+            "environment": "${Environment}"
+          }
+        KmsKeyId: !Ref KMSKey
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-database-secret'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== LAMBDA FUNCTIONS =====
+    LambdaLancamentos:
+      Type: AWS::Lambda::Function
+      Properties:
+        FunctionName: !Sub '${ProjectName}-${Environment}-lancamentos'
+        Runtime: python3.11
+        Handler: index.lambda_handler
+        Role: !GetAtt LambdaExecutionRole.Arn
+        Timeout: 30
+        MemorySize: 256
+        ReservedConcurrencyLimit: 100
+        Environment:
+          Variables:
+            DYNAMODB_TABLE_LANCAMENTOS: !Ref DynamoDBLancamentos
+            SQS_QUEUE_URL: !Ref ConsolidacaoQueue
+            KMS_KEY_ID: !Ref KMSKey
+            ENVIRONMENT: !Ref Environment
+            SECRET_NAME: !Ref DatabaseSecret
+        VpcConfig:
+          SecurityGroupIds:
+            - !Ref LambdaSecurityGroup
+          SubnetIds:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+        TracingConfig:
+          Mode: Active
+        Code:
+          ZipFile: |
+            import json
+            import boto3
+            import os
+            from datetime import datetime
+            import uuid
+            
+            def lambda_handler(event, context):
+                # Placeholder para função de lançamentos
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'message': 'Lambda de lançamentos funcionando',
+                        'environment': os.environ.get('ENVIRONMENT'),
+                        'timestamp': datetime.now().isoformat()
+                    })
+                }
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-lancamentos'
+          - Key: Environment
+            Value: !Ref Environment
+
+    LambdaConsolidado:
+      Type: AWS::Lambda::Function
+      Properties:
+        FunctionName: !Sub '${ProjectName}-${Environment}-consolidado'
+        Runtime: python3.11
+        Handler: index.lambda_handler
+        Role: !GetAtt LambdaExecutionRole.Arn
+        Timeout: 60
+        MemorySize: 512
+        ReservedConcurrencyLimit: 50
+        Environment:
+          Variables:
+            DYNAMODB_TABLE_CONSOLIDADO: !Ref DynamoDBConsolidado
+            DYNAMODB_TABLE_LANCAMENTOS: !Ref DynamoDBLancamentos
+            REDIS_ENDPOINT: !GetAtt RedisCluster.RedisEndpoint.Address
+            REDIS_PORT: !GetAtt RedisCluster.RedisEndpoint.Port
+            S3_BUCKET: !Ref S3Bucket
+            KMS_KEY_ID: !Ref KMSKey
+            ENVIRONMENT: !Ref Environment
+            SECRET_NAME: !Ref DatabaseSecret
+        VpcConfig:
+          SecurityGroupIds:
+            - !Ref LambdaSecurityGroup
+          SubnetIds:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+        TracingConfig:
+          Mode: Active
+        Code:
+          ZipFile: |
+            import json
+            import boto3
+            import os
+            from datetime import datetime
+            
+            def lambda_handler(event, context):
+                # Placeholder para função de consolidado
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'message': 'Lambda de consolidado funcionando',
+                        'environment': os.environ.get('ENVIRONMENT'),
+                        'timestamp': datetime.now().isoformat()
+                    })
+                }
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-consolidado'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # ===== EVENT SOURCE MAPPING =====
+    SQSEventSourceMapping:
+      Type: AWS::Lambda::EventSourceMapping
+      Properties:
+        EventSourceArn: !GetAtt ConsolidacaoQueue.Arn
+        FunctionName: !GetAtt LambdaConsolidado.Arn
+        BatchSize: 10
+        MaximumBatchingWindowInSeconds: 5
+
+    # ===== API GATEWAY =====
+    ApiGateway:
+      Type: AWS::ApiGateway::RestApi
+      Properties:
+        Name: !Sub '${ProjectName}-${Environment}-api'
+        Description: 'API Gateway para sistema de controle de fluxo de caixa'
+        EndpointConfiguration:
+          Types:
+            - REGIONAL
+        Policy:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: execute-api:Invoke
+              Resource: '*'
+              Condition:
+                IpAddress:
+                  aws:SourceIp: '0.0.0.0/0'  # Permitir todos IPs - ajustar conforme necessário
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-api'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # API Gateway Account Config para CloudWatch Logs
+    ApiGatewayAccount:
+      Type: AWS::ApiGateway::Account
+      Properties:
+        CloudWatchRoleArn: !GetAtt APIGatewayCloudWatchRole.Arn
+
+    APIGatewayCloudWatchRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: !Sub '${ProjectName}-${Environment}-apigateway-cloudwatch-role'
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: apigateway.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+    # Stage com configurações de segurança
+    ApiGatewayStage:
+      Type: AWS::ApiGateway::Stage
+      Properties:
+        RestApiId: !Ref ApiGateway
+        DeploymentId: !Ref ApiGatewayDeployment
+        StageName: !Ref Environment
+        ThrottleSettings:
+          RateLimit: 1000
+          BurstLimit: 2000
+        MethodSettings:
+          - ResourcePath: '/*'
+            HttpMethod: '*'
+            LoggingLevel: INFO
+            DataTraceEnabled: false
+            MetricsEnabled: true
+            ThrottlingRateLimit: 100
+            ThrottlingBurstLimit: 200
+        AccessLogSetting:
+          DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
+          Format: >
+            {
+              "requestId": "$context.requestId",
+              "ip": "$context.identity.sourceIp",
+              "caller": "$context.identity.caller",
+              "user": "$context.identity.user",
+              "requestTime": "$context.requestTime",
+              "httpMethod": "$context.httpMethod",
+              "resourcePath": "$context.resourcePath",
+              "status": "$context.status",
+              "protocol": "$context.protocol",
+              "responseLength": "$context.responseLength",
+              "error": "$context.error.message",
+              "integrationError": "$context.integration.error"
+            }
+        Tags:
+          - Key: Name
+            Value: !Sub '${ProjectName}-${Environment}-stage'
+          - Key: Environment
+            Value: !Ref Environment
+
+    # CloudWatch Log Group para API Gateway
+    ApiGatewayLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: !Sub '/aws/apigateway/${ProjectName}-${Environment}'
+        RetentionInDays: 14
+        KmsKeyId: !GetAtt KMSKey.Arn
+
+    ApiGatewayDeployment:
+      Type: AWS::ApiGateway::Deployment
+      DependsOn:
+        - LancamentosMethod
+        - ConsolidadoMethod
+        - HealthCheckMethod
+      Properties:
+        RestApiId: !Ref ApiGateway
+
+    # API Gateway Resources
+    LancamentosResource:
+      Type: AWS::ApiGateway::Resource
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ParentId: !GetAtt ApiGateway.RootResourceId
+        PathPart: lancamentos
+
+    ConsolidadoResource:
+      Type: AWS::ApiGateway::Resource
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ParentId: !GetAtt ApiGateway.RootResourceId
+        PathPart: consolidado
+
+    HealthCheckResource:
+      Type: AWS::ApiGateway::Resource
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ParentId: !GetAtt ApiGateway.RootResourceId
+        PathPart: health
+
+    # API Gateway Methods com Request Validation
+    LancamentosMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ResourceId: !Ref LancamentosResource
+        HttpMethod: POST
+        AuthorizationType: NONE
+        RequestValidatorId: !Ref RequestValidator
+        RequestModels:
+          application/json: !Ref LancamentoModel
+        Integration:
+          Type: AWS_PROXY
+          IntegrationHttpMethod: POST
+          Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaLancamentos.Arn}/invocations'
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseParameters:
+                method.response.header.Access-Control-Allow-Origin: "'*'"
+            - StatusCode: 400
+              SelectionPattern: '.*"statusCode":400.*'
+            - StatusCode: 500
+              SelectionPattern: '.*"statusCode":500.*'
+        MethodResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: false
+          - StatusCode: 400
+          - StatusCode: 500
+
+    ConsolidadoMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ResourceId: !Ref ConsolidadoResource
+        HttpMethod: GET
+        AuthorizationType: NONE
+        RequestParameters:
+          method.request.querystring.data: false
+        Integration:
+          Type: AWS_PROXY
+          IntegrationHttpMethod: POST
+          Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaConsolidado.Arn}/invocations'
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseParameters:
+                method.response.header.Access-Control-Allow-Origin: "'*'"
+          RequestTemplates:
+            application/json: |
+              {
+                "queryStringParameters": {
+                  #foreach($param in $input.params().querystring.keySet())
+                  "$param": "$util.escapeJavaScript($input.params().querystring.get($param))"
+                  #if($foreach.hasNext),#end
+                  #end
+                }
+              }
+        MethodResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: false
+
+    HealthCheckMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ResourceId: !Ref HealthCheckResource
+        HttpMethod: GET
+        AuthorizationType: NONE
+        Integration:
+          Type: MOCK
+          IntegrationHttpMethod: GET
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseTemplates:
+                application/json: |
+                  {
+                    "status": "healthy",
+                    "timestamp": "$context.requestTime",
+                    "environment": "${Environment}"
+                  }
+          RequestTemplates:
+            application/json: '{"statusCode": 200}'
+        MethodResponses:
+          - StatusCode: 200
+
+    # Request Validator
+    RequestValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties:
+        RestApiId: !Ref ApiGateway
+        Name: !Sub '${ProjectName}-${Environment}-validator'
+        ValidateRequestBody: true
+        ValidateRequestParameters: true
+
+    # Models para validação
+    LancamentoModel:
+      Type: AWS::ApiGateway::Model
+      Properties:
+        RestApiId: !Ref ApiGateway
+        ContentType: application/json
+        Name: LancamentoModel
+        Schema:
+          $schema: 'http://json-schema.org/draft-04/schema#'
+          title: Lancamento Schema
+          type: object
+          required:
+            - tipo
+            - valor
+            - descricao
+          properties:
+            tipo:
+              type: string
+              enum: ['DEBITO', 'CREDITO']
+            valor:
+              type: number
+              minimum: 0.01
+            descricao:
+              type: string
+              minLength: 1
+              maxLength: 255
+            data:
+              type: string
+              format: date
+
+    # Lambda Permissions
+    LambdaLancamentosPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: !GetAtt LambdaLancamentos.Arn
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+        SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
+
+    LambdaConsolidadoPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: !GetAtt LambdaConsolidado.Arn
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+        SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
+
+    # ===== WAF para API Gateway =====
+    # WebACL:
+    #   Type: AWS::WAFv2::WebACL
+    #   Properties:
+    #     Name: !Sub '${ProjectName}-${Environment}-waf'
+    #     Scope: REGIONAL
+    #     DefaultAction:
+    #       Allow: {}
+    #     Rules:
+    #       - Name: RateLimitRule
+    #         Priority: 1
+    #         Statement:
+    #           RateBasedStatement:
+    #             Limit: 1000
+    #             AggregateKeyType: IP
+    #         Action:
+    #           Block: {}
+    #         VisibilityConfig:
+    #           SampledRequestsEnabled: true
+    #           CloudWatchMetricsEnabled: true
+    #           MetricName: RateLimitRule
+    #       - Name: SQLInjectionRule
+    #         Priority: 2
+    #         Statement:
+    #           ManagedRuleGroupStatement:
+    #             VendorName: AWS
+    #             Name: AWSManagedRulesKnownBadInputsRuleSet
+    #         OverrideAction:
+    #           None: {}
+    #         VisibilityConfig:
+    #           SampledRequestsEnabled: true
+    #           CloudWatchMetricsEnabled: true
+    #           MetricName: SQLInjectionRule
+    #       - Name: CommonRuleSet
+    #         Priority: 3
+    #         Statement:
+    #           ManagedRuleGroupStatement:
+    #             VendorName: AWS
+    #             Name: AWSManagedRulesCommonRuleSet
+    #         OverrideAction:
+    #           None: {}
+    #         VisibilityConfig:
+    #           SampledRequestsEnabled: true
+    #           CloudWatchMetricsEnabled: true
+    #           MetricName: CommonRuleSet
+    #     VisibilityConfig:
+    #       SampledRequestsEnabled: true
+    #       CloudWatchMetricsEnabled: true
+    #       MetricName: !Sub '${ProjectName}${Environment}WebACL'
+    #     Tags:
+    #       - Key: Name
+    #         Value: !Sub '${ProjectName}-${Environment}-waf'
+    #       - Key: Environment
+    #         Value: !Ref Environment
+
+    # # Associação WAF com API Gateway
+    # WebACLAssociation:
+    #   Type: AWS::WAFv2::WebACLAssociation
+    #   Properties:
+    #     ResourceArn: !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis/${ApiGateway}/stages/${Environment}'
+    #     WebACLArn: !GetAtt WebACL.Arn
+
+  Outputs:
+    VPCId:
+      Description: 'ID da VPC criada'
+      Value: !Ref VPC
+      Export:
+        Name: !Sub '${ProjectName}-${Environment}-vpc-id'
+
+    ApiGatewayUrl:
+      Description: 'URL base do API Gateway'
+      Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Export:
+        Name:
