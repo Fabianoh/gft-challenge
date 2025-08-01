@@ -88,23 +88,35 @@ Cliente → Cloudfront -> S3 Website -> API Gateway → Lambda Lançamentos → 
     - ***Descrição***: Firewall de aplicação web para proteção contra ataques comuns e filtragem de tráfego malicioso.
     - ***Motivo de uso***: proteção proativa, rate limiting avançado, proteção contra bot, regras customizadas, integração com CLoudfront.
 
+
 ### #######################################################################################
 ### Como executar esse projeto
 ### #######################################################################################
 - **PASSO 1**:
 Clone o repositório: https://github.com/Fabianoh/gft-challenge
 
+Aqui você vai encontrar as seguintes pastas:
+    - ***/apps/***: Contém o código fonte das funções lambdas de Lançamento e Consolidado
+    - ***/infra/cfn***: Contém todos os scripts cloudformation para criação de toda a infra como código.
+    - ***/infra/lambdas***: Contém arquivos .zip referentes às funções lambdas/python usadas para Lançamento e Consolidado, bem como layers usadas como libs dessas funções.
+
 - **PASSO 2**
 Crie um bucket e uma role, cujo Principal seja cloudformation.amazonaws.com. Essa role deverá ter todas as permissões para que você crie os recursos AWS necessários nesse projeto, via cloudformation.
 PS: se quiser, eu posso lhe passar o script dessa role.
 
 - **PASSO 3**
-Com o repositório clonado para a sua máquina, localize o diretório gft-challenge\infra\cfn
+Faça o upload dos scrips para dentro do bucket criado no passo 2. 
+Se quiser, você pode usar o seguinte comando AWS CLI:
+aws s3 sync gft-challenge/ s3://<NOME_BUCKET>
+Substitua <NOME_BUCKET> pelo nome do bucket criado no passo 2.
 
 - **PASSO 4**
 Execute o comando AWS CLI abaixo:
-aws cloudformation create-stack --stack-name gft-challenge --template-body file://main.yml --parameters ParameterKey=AlertEmail,ParameterValue=<EMAIL_NOTIFICACAO> ParameterKey=BucketCFN,ParameterValue=<NOME_BUCKET> --capabilities CAPABILITY_NAMED_IAM 
+
+aws cloudformation create-stack --stack-name gft-challenge --template-url https://s3.amazonaws.com/gft-challenge/infra/cfn/main.yml --parameters ParameterKey=AlertEmail,ParameterValue=fabianoh.alves@gmail.com ParameterKey=BucketCFN,ParameterValue=gft-challenge --capabilities CAPABILITY_NAMED_IAM
+
 ou
+
 Crie a stack diretamente na console AWS.
 
 PS: Substitua os parâmetros <EMAIL_NOTIFICACAO> por um email à sua escolha e <NOME_BUCKET> pelo nome do bucket que foi criado no PASSO 2

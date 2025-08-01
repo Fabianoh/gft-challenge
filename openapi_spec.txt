@@ -46,7 +46,7 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
               example:
                 status: "healthy"
-                timestamp: "2024-01-15T10:00:00Z"
+                timestamp: "2025-07-30T10:00:00Z"
                 environment: "production"
                 version: "1.0.0"
                 services:
@@ -128,14 +128,14 @@ paths:
           schema:
             type: string
             format: date
-          example: "2024-01-01"
+          example: "2025-07-01"
         - name: data_fim
           in: query
           description: Data fim do filtro (YYYY-MM-DD)
           schema:
             type: string
             format: date
-          example: "2024-01-31"
+          example: "2025-07-31"
         - name: tipo
           in: query
           description: Filtrar por tipo de lançamento
@@ -228,7 +228,7 @@ paths:
           schema:
             type: string
             format: date
-          example: "2024-01-15"
+          example: "2025-07-30"
         - name: incluir_detalhes
           in: query
           description: Incluir detalhes dos lançamentos
@@ -270,7 +270,7 @@ paths:
           schema:
             type: string
             format: date
-          example: "2024-01-01"
+          example: "2025-07-01"
         - name: data_fim
           in: query
           required: true
@@ -278,7 +278,7 @@ paths:
           schema:
             type: string
             format: date
-          example: "2024-01-31"
+          example: "2025-07-31"
         - name: formato
           in: query
           description: Formato do relatório
@@ -411,7 +411,7 @@ components:
           type: string
           format: date-time
           description: Data/hora do lançamento (ISO 8601)
-          example: "2024-01-15T14:30:00Z"
+          example: "2025-07-30T14:30:00Z"
         tags:
           type: array
           items:
@@ -453,7 +453,7 @@ components:
         data:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:00Z"
+          example: "2025-07-30T14:30:00Z"
         tags:
           type: array
           items:
@@ -465,11 +465,11 @@ components:
         data_criacao:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:01Z"
+          example: "2025-07-30T14:30:01Z"
         data_atualizacao:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:01Z"
+          example: "2025-07-30T14:30:01Z"
         status:
           type: string
           enum: [ATIVO, CANCELADO]
@@ -481,7 +481,7 @@ components:
         data:
           type: string
           format: date
-          example: "2024-01-15"
+          example: "2025-07-30"
         saldo_inicial:
           type: number
           format: double
@@ -542,7 +542,7 @@ components:
         ultima_atualizacao:
           type: string
           format: date-time
-          example: "2024-01-15T15:30:00Z"
+          example: "2025-07-30T15:30:00Z"
         fonte_dados:
           type: string
           enum: [cache, database]
@@ -559,7 +559,7 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: "2024-01-15T10:00:00Z"
+          example: "2025-07-30T10:00:00Z"
         environment:
           type: string
           example: "production"
@@ -593,7 +593,7 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:01Z"
+          example: "2025-07-30T14:30:01Z"
 
     LancamentoResponse:
       type: object
@@ -690,11 +690,11 @@ components:
                 inicio:
                   type: string
                   format: date
-                  example: "2024-01-01"
+                  example: "2025-07-01"
                 fim:
                   type: string
                   format: date
-                  example: "2024-01-31"
+                  example: "2025-07-31"
                 dias_uteis:
                   type: integer
                   example: 22
@@ -796,7 +796,7 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:01Z"
+          example: "2025-07-30T14:30:01Z"
         request_id:
           type: string
           format: uuid
@@ -831,7 +831,7 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: "2024-01-15T14:30:01Z"
+          example: "2025-07-30T14:30:01Z"
 
   examples:
     LancamentoCredito:
@@ -892,7 +892,7 @@ components:
             success: false
             error: "NOT_FOUND"
             message: "Recurso não encontrado"
-            timestamp: "2024-01-15T14:30:01Z"
+            timestamp: "2025-07-30T14:30:01Z"
 
     Unauthorized:
       description: Autenticação necessária
@@ -904,7 +904,7 @@ components:
             success: false
             error: "UNAUTHORIZED"
             message: "API Key inválida ou ausente"
-            timestamp: "2024-01-15T14:30:01Z"
+            timestamp: "2025-07-30T14:30:01Z"
 
     RateLimitExceeded:
       description: Rate limit excedido
@@ -923,7 +923,7 @@ components:
             success: false
             error: "RATE_LIMIT_EXCEEDED"
             message: "Limite de requisições excedido. Tente novamente em alguns segundos."
-            timestamp: "2024-01-15T14:30:01Z"
+            timestamp: "2025-07-30T14:30:01Z"
 
 tags:
   - name: System
