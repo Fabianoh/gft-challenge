@@ -41,19 +41,19 @@ Parameters:
     Description: The name of the ZIP package
     Type: String
     Default: infra/lambdas/lancamentos.zip
-  S3ObjectVersionLambdaLancamentos:
-    Description: The version ID of the ZIP package
-    Type: String
-    Default: .omWjkdg7FVf2xCmH0pc7YDtW3QLkQiA
+  # S3ObjectVersionLambdaLancamentos:
+  #   Description: The version ID of the ZIP package
+  #   Type: String
+  #   Default: .omWjkdg7FVf2xCmH0pc7YDtW3QLkQiA
 
   S3KeyLambdaConsolidado:
     Description: The name of the ZIP package
     Type: String
     Default: infra/lambdas/consolidado.zip
-  S3ObjectVersionLambdaConsolidado:
-    Description: The version ID of the ZIP package
-    Type: String
-    Default: iNJsWqCQ4hteVmvxVfzcanHzvsKoGHQe
+  # S3ObjectVersionLambdaConsolidado:
+  #   Description: The version ID of the ZIP package
+  #   Type: String
+  #   Default: iNJsWqCQ4hteVmvxVfzcanHzvsKoGHQe
 
   S3XrayLayerKey:
     Type: String
@@ -248,8 +248,8 @@ Resources:
           Ref: S3BucketLambdas
         S3Key:
           Ref: S3KeyLambdaLancamentos
-        S3ObjectVersion:
-          Ref: S3ObjectVersionLambdaLancamentos
+        # S3ObjectVersion:
+        #   Ref: S3ObjectVersionLambdaLancamentos
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-lancamentos'
@@ -297,8 +297,8 @@ Resources:
           Ref: S3BucketLambdas
         S3Key:
           Ref: S3KeyLambdaConsolidado
-        S3ObjectVersion:
-          Ref: S3ObjectVersionLambdaConsolidado        
+        # S3ObjectVersion:
+        #   Ref: S3ObjectVersionLambdaConsolidado        
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-${Environment}-consolidado'
