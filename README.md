@@ -91,3 +91,25 @@ Cliente → Cloudfront -> S3 Website -> API Gateway → Lambda Lançamentos → 
 ### #######################################################################################
 ### Como executar esse projeto
 ### #######################################################################################
+- **PASSO 1**:
+Clone o repositório: https://github.com/Fabianoh/gft-challenge
+
+- **PASSO 2**
+Crie um bucket e uma role, cujo Principal seja cloudformation.amazonaws.com. Essa role deverá ter todas as permissões para que você crie os recursos AWS necessários nesse projeto, via cloudformation.
+PS: se quiser, eu posso lhe passar o script dessa role.
+
+- **PASSO 3**
+Com o repositório clonado para a sua máquina, localize o diretório gft-challenge\infra\cfn
+
+- **PASSO 4**
+Execute o comando AWS CLI abaixo:
+aws cloudformation create-stack --stack-name gft-challenge --template-body file://main.yml --parameters ParameterKey=AlertEmail,ParameterValue=<EMAIL_NOTIFICACAO> ParameterKey=BucketCFN,ParameterValue=<NOME_BUCKET> --capabilities CAPABILITY_NAMED_IAM 
+ou
+Crie a stack diretamente na console AWS.
+
+PS: Substitua os parâmetros <EMAIL_NOTIFICACAO> por um email à sua escolha e <NOME_BUCKET> pelo nome do bucket que foi criado no PASSO 2
+
+- **PERMISSAS**
+- Conta AWS criada e ativa
+- AWS CLI instalado e configurado
+- Role para criação e execução do cloudformation criada.
