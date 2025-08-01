@@ -44,7 +44,7 @@ Resources:
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/securitygroup.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/securitygroup.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -60,7 +60,7 @@ Resources:
   KmsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/kms.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/kms.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -70,7 +70,7 @@ Resources:
   DynamodbStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/dynamodb.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/dynamodb.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -86,7 +86,7 @@ Resources:
   S3bucketsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/buckets.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/buckets.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -102,7 +102,7 @@ Resources:
   SQSSNSStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/sqs_sns.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/sqs_sns.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -120,7 +120,7 @@ Resources:
   RedisStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/redis.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/redis.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -145,7 +145,7 @@ Resources:
   Secretstack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/secrets.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/secrets.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -170,7 +170,7 @@ Resources:
   Lambdastack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/lambdas.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/lambdas.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -241,7 +241,7 @@ Resources:
   ApiGatewayStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/apigateway.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/apigateway.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -275,7 +275,7 @@ Resources:
     DependsOn:
       - ApiGatewayStack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/observabilidade.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/observabilidade.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
