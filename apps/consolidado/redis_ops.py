@@ -30,7 +30,7 @@ def get_redis_client() -> Optional[redis.Redis]:
             # Testar conexão
             _redis_client.ping()
             config.logger.info("Conexão Redis estabelecida com sucesso")
-        except Exception as e:
+        except BaseException as e:
             config.logger.warning(f"Erro ao conectar no Redis: {str(e)}")
             _redis_client = None
 
@@ -50,7 +50,7 @@ def get_from_cache(key: str) -> Optional[Dict[str, Any]]:
         cached_data = redis_client.get(key)
         if cached_data:
             return json.loads(cached_data)
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao recuperar do cache: {str(e)}")
 
     return None
@@ -67,7 +67,7 @@ def set_cache(key: str, data: Dict[str, Any], ttl: int = 3600) -> None:
 
     try:
         redis_client.setex(key, ttl, json.dumps(data, default=str))
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao armazenar no cache: {str(e)}")
 
 
@@ -85,5 +85,5 @@ def invalidate_cache(pattern: str) -> None:
         if keys:
             redis_client.delete(*keys)
             config.logger.info(f"Cache invalidado: {len(keys)} chaves removidas")
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao invalidar cache: {str(e)}")

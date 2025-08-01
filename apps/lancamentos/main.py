@@ -37,7 +37,7 @@ def lambda_handler(event, context) -> Dict[str, Any]:
                 'message': f'Método {http_method} não é suportado para o recurso {resource_path}'
             })
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro inesperado no handler principal: {e}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',

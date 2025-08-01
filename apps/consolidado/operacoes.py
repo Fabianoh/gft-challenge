@@ -64,6 +64,10 @@ def calculate_saldo_diario(data: str, saldo_anterior: Decimal = Decimal('0')) ->
     """
     Calcula saldo diário para uma data específica
     """
+    # Garantir que saldo_anterior seja Decimal
+    if not isinstance(saldo_anterior, Decimal):
+        saldo_anterior = Decimal(str(saldo_anterior))
+    
     # Definir período (início e fim do dia)
     data_inicio = f"{data}T00:00:00"
     data_fim = f"{data}T23:59:59"
@@ -76,10 +80,17 @@ def calculate_saldo_diario(data: str, saldo_anterior: Decimal = Decimal('0')) ->
     total_debitos = Decimal('0')
 
     for lancamento in lancamentos:
-        valor = Decimal(str(lancamento['valor']))
-        if lancamento['tipo'] == 'CREDITO':
+        # Garantir conversão correta para Decimal
+        valor_raw = lancamento.get('valor', 0)
+        if isinstance(valor_raw, Decimal):
+            valor = valor_raw
+        else:
+            valor = Decimal(str(valor_raw))
+        
+        tipo = lancamento.get('tipo', '')
+        if tipo == 'CREDITO':
             total_creditos += valor
-        else:  # DEBITO
+        elif tipo == 'DEBITO':
             total_debitos += valor
 
     # Calcular saldo final
@@ -115,7 +126,6 @@ def save_saldo_diario(saldo: SaldoDiario) -> None:
 
     except BaseException as e:
         config.logger.error(f"Erro ao salvar saldo diário: {str(e)}")
-        #raise ConsolidadoError("Erro ao salvar consolidado")
         raise "Erro ao salvar consolidado"
 
 
@@ -130,7 +140,21 @@ def get_saldo_diario(data: str, use_cache: bool = True) -> Optional[SaldoDiario]
     if use_cache:
         cached_data = get_from_cache(cache_key)
         if cached_data:
-            return SaldoDiario(**cached_data)
+            try:
+                # Garantir conversão correta dos tipos
+                return SaldoDiario(
+                    data=cached_data['data'],
+                    saldo_inicial=Decimal(str(cached_data['saldo_inicial'])),
+                    total_creditos=Decimal(str(cached_data['total_creditos'])),
+                    total_debitos=Decimal(str(cached_data['total_debitos'])),
+                    saldo_final=Decimal(str(cached_data['saldo_final'])),
+                    quantidade_lancamentos=int(cached_data['quantidade_lancamentos']),
+                    ultima_atualizacao=cached_data['ultima_atualizacao']
+                )
+            except (KeyError, ValueError, TypeError) as e:
+                config.logger.warning(f"Erro ao reconstruir SaldoDiario do cache: {str(e)}")
+                # Se houver erro, invalida o cache e continua para DynamoDB
+                invalidate_cache(cache_key)
 
     try:
         response = config.tableConsolidado.get_item(Key={'data': data})
@@ -149,7 +173,17 @@ def get_saldo_diario(data: str, use_cache: bool = True) -> Optional[SaldoDiario]
 
             # Armazenar no cache
             if use_cache:
-                set_cache(cache_key, asdict(saldo), ttl=3600)  # 1 hora
+                # Converter Decimal para string para serialização JSON
+                cache_data = {
+                    'data': saldo.data,
+                    'saldo_inicial': str(saldo.saldo_inicial),
+                    'total_creditos': str(saldo.total_creditos),
+                    'total_debitos': str(saldo.total_debitos),
+                    'saldo_final': str(saldo.saldo_final),
+                    'quantidade_lancamentos': saldo.quantidade_lancamentos,
+                    'ultima_atualizacao': saldo.ultima_atualizacao
+                }
+                set_cache(cache_key, cache_data, ttl=3600)
 
             return saldo
 
@@ -172,22 +206,48 @@ def get_saldo_anterior(data: str) -> Decimal:
         if saldo_anterior:
             return saldo_anterior.saldo_final
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao recuperar saldo anterior: {str(e)}")
 
     return Decimal('0')
 
 
+@xray_recorder.capture('generate_relatorio_periodo')
 def generate_relatorio_periodo(data_inicio: str, data_fim: str) -> RelatorioConsolidado:
     cache_key = f"relatorio:{data_inicio}:{data_fim}:{config.environment}"
 
     # Tentar recuperar do cache
     cached_data = get_from_cache(cache_key)
     if cached_data:
-        # Reconstruir objetos SaldoDiario
-        saldos_diarios = [SaldoDiario(**saldo) for saldo in cached_data['saldos_diarios']]
-        cached_data['saldos_diarios'] = saldos_diarios
-        return RelatorioConsolidado(**cached_data)
+        try:
+            # Reconstruir objetos SaldoDiario do cache
+            saldos_diarios = []
+            for saldo_data in cached_data.get('saldos_diarios', []):
+                saldo = SaldoDiario(
+                    data=saldo_data['data'],
+                    saldo_inicial=Decimal(str(saldo_data['saldo_inicial'])),
+                    total_creditos=Decimal(str(saldo_data['total_creditos'])),
+                    total_debitos=Decimal(str(saldo_data['total_debitos'])),
+                    saldo_final=Decimal(str(saldo_data['saldo_final'])),
+                    quantidade_lancamentos=int(saldo_data['quantidade_lancamentos']),
+                    ultima_atualizacao=saldo_data['ultima_atualizacao']
+                )
+                saldos_diarios.append(saldo)
+            
+            return RelatorioConsolidado(
+                periodo_inicio=cached_data['periodo_inicio'],
+                periodo_fim=cached_data['periodo_fim'],
+                saldo_inicial_periodo=Decimal(str(cached_data['saldo_inicial_periodo'])),
+                saldo_final_periodo=Decimal(str(cached_data['saldo_final_periodo'])),
+                total_creditos_periodo=Decimal(str(cached_data['total_creditos_periodo'])),
+                total_debitos_periodo=Decimal(str(cached_data['total_debitos_periodo'])),
+                quantidade_dias=int(cached_data['quantidade_dias']),
+                saldos_diarios=saldos_diarios
+            )
+        except (KeyError, ValueError, TypeError) as e:
+            config.logger.warning(f"Erro ao reconstruir RelatorioConsolidado do cache: {str(e)}")
+            # Se houver erro, invalida o cache e recalcula
+            invalidate_cache(cache_key)
 
     try:
         # Gerar lista de datas no período
@@ -235,15 +295,34 @@ def generate_relatorio_periodo(data_inicio: str, data_fim: str) -> RelatorioCons
             saldos_diarios=saldos_diarios
         )
 
-        # Armazenar no cache (2 horas para relatórios)
-        relatorio_dict = asdict(relatorio)
-        set_cache(cache_key, relatorio_dict, ttl=7200)
+        # Armazenar no cache (converter Decimal para string)
+        cache_data = {
+            'periodo_inicio': relatorio.periodo_inicio,
+            'periodo_fim': relatorio.periodo_fim,
+            'saldo_inicial_periodo': str(relatorio.saldo_inicial_periodo),
+            'saldo_final_periodo': str(relatorio.saldo_final_periodo),
+            'total_creditos_periodo': str(relatorio.total_creditos_periodo),
+            'total_debitos_periodo': str(relatorio.total_debitos_periodo),
+            'quantidade_dias': relatorio.quantidade_dias,
+            'saldos_diarios': [
+                {
+                    'data': saldo.data,
+                    'saldo_inicial': str(saldo.saldo_inicial),
+                    'total_creditos': str(saldo.total_creditos),
+                    'total_debitos': str(saldo.total_debitos),
+                    'saldo_final': str(saldo.saldo_final),
+                    'quantidade_lancamentos': saldo.quantidade_lancamentos,
+                    'ultima_atualizacao': saldo.ultima_atualizacao
+                }
+                for saldo in relatorio.saldos_diarios
+            ]
+        }
+        set_cache(cache_key, cache_data, ttl=7200)
 
         return relatorio
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.error(f"Erro ao gerar relatório: {str(e)}")
-        #raise ConsolidadoError("Erro ao gerar relatório consolidado")
         raise "Erro ao gerar relatório consolidado"
 
 
@@ -253,9 +332,31 @@ def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
     Salva relatório no S3 para backup/histórico
     """
     try:
-        # Preparar dados do relatório
+        # Preparar dados do relatório (converter Decimal para string)
+        relatorio_serializable = {
+            'periodo_inicio': relatorio.periodo_inicio,
+            'periodo_fim': relatorio.periodo_fim,
+            'saldo_inicial_periodo': str(relatorio.saldo_inicial_periodo),
+            'saldo_final_periodo': str(relatorio.saldo_final_periodo),
+            'total_creditos_periodo': str(relatorio.total_creditos_periodo),
+            'total_debitos_periodo': str(relatorio.total_debitos_periodo),
+            'quantidade_dias': relatorio.quantidade_dias,
+            'saldos_diarios': [
+                {
+                    'data': saldo.data,
+                    'saldo_inicial': str(saldo.saldo_inicial),
+                    'total_creditos': str(saldo.total_creditos),
+                    'total_debitos': str(saldo.total_debitos),
+                    'saldo_final': str(saldo.saldo_final),
+                    'quantidade_lancamentos': saldo.quantidade_lancamentos,
+                    'ultima_atualizacao': saldo.ultima_atualizacao
+                }
+                for saldo in relatorio.saldos_diarios
+            ]
+        }
+        
         relatorio_data = {
-            'relatorio': asdict(relatorio),
+            'relatorio': relatorio_serializable,
             'gerado_em': datetime.now(timezone.utc).isoformat(),
             'ambiente': config.environment,
             'versao': '1.0'
@@ -269,7 +370,7 @@ def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
         config.s3Client.put_object(
             Bucket=config.S3_BUCKET,
             Key=filename,
-            Body=json.dumps(relatorio_data, default=str, ensure_ascii=False),
+            Body=json.dumps(relatorio_data, ensure_ascii=False, indent=2),
             ContentType='application/json',
             ServerSideEncryption='aws:kms'
         )
@@ -279,7 +380,6 @@ def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
 
     except BaseException as e:
         config.logger.error(f"Erro ao salvar relatório no S3: {str(e)}")
-        #raise ConsolidadoError("Erro ao salvar relatório")
         raise "Erro ao salvar relatório"
 
 
@@ -306,7 +406,7 @@ def recalculate_subsequent_balances(data_inicio: str, max_days: int = 30) -> Non
             # Invalidar cache
             invalidate_cache(f"saldo_diario:{data_atual}:*")
 
-    except Exception as e:
+    except BaseException as e:
         config.logger.warning(f"Erro ao recalcular saldos subsequentes: {str(e)}")
 
 
@@ -320,5 +420,16 @@ def has_lancamentos_for_date(data: str) -> bool:
     try:
         lancamentos = get_lancamentos_by_date_range(data_inicio, data_fim)
         return len(lancamentos) > 0
-    except Exception:
+    except BaseException:
         return False
+
+
+# # Função utilitária para debug de tipos
+# def debug_types(obj, name="objeto"):
+#     """
+#     Função para debug de tipos de dados
+#     """
+#     config.logger.info(f"🔍 Debug {name}: tipo={type(obj)}, valor={obj}")
+#     if hasattr(obj, '__dict__'):
+#         for key, value in obj.__dict__.items():
+#             config.logger.info(f"  {key}: tipo={type(value)}, valor={value}")

@@ -64,15 +64,6 @@ Resources:
       CloudWatchRoleArn: !GetAtt APIGatewayCloudWatchRole.Arn
     DependsOn: APIGatewayCloudWatchRole
 
-  # # CloudWatch Log Group para API Gateway
-  # ApiGatewayLogGroup:
-  #   Type: AWS::Logs::LogGroup
-  #   Properties:
-  #     LogGroupName: !Sub '/aws/apigateway/${ProjectName}-${Environment}'
-  #     RetentionInDays: 14
-  #     #KmsKeyId: !Ref KMSKey
-
-
   ApiGateway:
     Type: AWS::ApiGateway::RestApi
     Properties:
@@ -127,6 +118,7 @@ Resources:
     DependsOn:
       - ApiGateway
 
+  
   ConsolidadoResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -135,7 +127,17 @@ Resources:
       PathPart: consolidado
     DependsOn:
       - ApiGateway
+    
+  ConsolidadoRelatorioResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref ConsolidadoResource
+      PathPart: relatorio
+    DependsOn:
+      - ApiGateway
 
+  
   HealthCheckResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -144,6 +146,13 @@ Resources:
       PathPart: health
     DependsOn:
       - ApiGateway
+
+  MetricasResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: metricas
 
   # Models para validação
   LancamentoModel:
@@ -354,6 +363,66 @@ Resources:
       - ConsolidadoResource
 
 
+  ConsolidadoRelatorioMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ConsolidadoRelatorioResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.querystring.data_inicio: true
+        method.request.querystring.data_fim: true
+        method.request.querystring.formato: false
+        method.request.querystring.incluir_detalhes: false
+        method.request.querystring.agrupar_por: false
+        method.request.querystring.salvar_s3: false
+        method.request.querystring.email_relatorio: false
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaConsolidadoArn}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+          - StatusCode: 400
+            SelectionPattern: '.*"statusCode":400.*'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: false
+        - StatusCode: 400
+    DependsOn:
+      - ConsolidadoRelatorioResource
+
+  ConsolidadoRelatorioOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ConsolidadoRelatorioResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Headers: false
+    DependsOn:
+        - ConsolidadoRelatorioResource
+
+
   HealthCheckMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -379,6 +448,58 @@ Resources:
         - StatusCode: 200
     DependsOn:
       - HealthCheckResource
+
+
+  MetricasMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref MetricasResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.querystring.periodo: false
+        method.request.querystring.incluir_tendencias: false
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaConsolidadoArn}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: false
+    DependsOn:
+      - MetricasResource
+
+  MetricasOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref MetricasResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Headers: false
+    DependsOn:
+      - MetricasResource
 
    
   ApiGatewayDeployment:

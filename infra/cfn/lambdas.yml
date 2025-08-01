@@ -53,7 +53,7 @@ Parameters:
   S3ObjectVersionLambdaConsolidado:
     Description: The version ID of the ZIP package
     Type: String
-    Default: bMLf8fHecciAGMGAyliBTdsVxYVgSTLN
+    Default: iNJsWqCQ4hteVmvxVfzcanHzvsKoGHQe
 
   S3XrayLayerKey:
     Type: String

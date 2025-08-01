@@ -1,0 +1,936 @@
+openapi: 3.0.3
+info:
+  title: API de Controle de Fluxo de Caixa
+  description: |
+    API RESTful para gerenciamento de fluxo de caixa diário com suporte a:
+    - Registro de lançamentos (débitos e créditos)
+    - Consulta de saldos consolidados
+    - Geração de relatórios financeiros
+    - Métricas e analytics em tempo real
+    
+    ## Funcionalidades Principais
+    - ✅ CRUD completo de lançamentos
+    - ✅ Consolidação automática de saldos
+    - ✅ Relatórios por período
+    - ✅ Cache inteligente para performance
+    - ✅ Auditoria e rastreabilidade
+    - ✅ Rate limiting e segurança
+    
+    ## Arquitetura
+    Sistema serverless na AWS com arquitetura de microsserviços, garantindo:
+    - **Escalabilidade**: Auto-scaling baseado em demanda
+    - **Resiliência**: Comunicação assíncrona entre domínios
+    - **Performance**: Cache Redis para consultas frequentes
+    - **Observabilidade**: Logs estruturados e métricas detalhadas
+  version: 1.0.0
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health Check
+      description: Verifica o status de saúde da API e seus componentes
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Sistema funcionando normalmente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                timestamp: "2024-01-15T10:00:00Z"
+                environment: "production"
+                version: "1.0.0"
+                services:
+                  database: "healthy"
+                  cache: "healthy"
+                  queue: "healthy"
+        '503':
+          description: Serviços indisponíveis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /lancamentos:
+    post:
+      tags:
+        - Lançamentos
+      summary: Criar Lançamento
+      description: Registra um novo lançamento (débito ou crédito) no sistema
+      operationId: criarLancamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarLancamentoRequest'
+            examples:
+              credito:
+                summary: Exemplo de Crédito
+                value:
+                  tipo: "CREDITO"
+                  valor: 1500.50
+                  descricao: "Pagamento recebido do cliente"
+                  categoria: "VENDAS"
+                  tags: ["cliente-vip", "pagamento-antecipado"]
+              debito:
+                summary: Exemplo de Débito
+                value:
+                  tipo: "DEBITO"
+                  valor: 250.00
+                  descricao: "Pagamento fornecedor"
+                  categoria: "DESPESAS"
+      responses:
+        '201':
+          description: Lançamento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LancamentoCriadoResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '422':
+          description: Erro de validação de negócio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Lançamentos
+      summary: Listar Lançamentos
+      description: Recupera uma lista de lançamentos com filtros opcionais
+      operationId: listarLancamentos
+      parameters:
+        - name: data_inicio
+          in: query
+          description: Data início do filtro (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: data_fim
+          in: query
+          description: Data fim do filtro (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2024-01-31"
+        - name: tipo
+          in: query
+          description: Filtrar por tipo de lançamento
+          schema:
+            type: string
+            enum: [CREDITO, DEBITO]
+        - name: categoria
+          in: query
+          description: Filtrar por categoria
+          schema:
+            type: string
+          example: "VENDAS"
+        - name: tags
+          in: query
+          description: Filtrar por tags (separadas por vírgula)
+          schema:
+            type: string
+          example: "cliente-vip,urgente"
+        - name: limit
+          in: query
+          description: Limite de resultados
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          description: Offset para paginação
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort
+          in: query
+          description: Ordenação dos resultados
+          schema:
+            type: string
+            enum: [data_asc, data_desc, valor_asc, valor_desc]
+            default: data_desc
+      responses:
+        '200':
+          description: Lista de lançamentos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaLancamentosResponse'
+
+  /lancamentos/{id}:
+    get:
+      tags:
+        - Lançamentos
+      summary: Obter Lançamento por ID
+      description: Recupera um lançamento específico pelo seu ID
+      operationId: obterLancamento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID único do lançamento
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Lançamento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LancamentoResponse'
+        '404':
+          description: Lançamento não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /consolidado:
+    get:
+      tags:
+        - Consolidado
+      summary: Consultar Saldo Diário
+      description: Obtém o saldo consolidado para uma data específica ou atual
+      operationId: consultarSaldoDiario
+      parameters:
+        - name: data
+          in: query
+          description: Data para consulta (YYYY-MM-DD). Se não informada, usa data atual
+          schema:
+            type: string
+            format: date
+          example: "2024-01-15"
+        - name: incluir_detalhes
+          in: query
+          description: Incluir detalhes dos lançamentos
+          schema:
+            type: boolean
+            default: false
+        - name: refresh_cache
+          in: query
+          description: Forçar recálculo ignorando cache
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Saldo diário consolidado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaldoDiarioResponse'
+        '400':
+          description: Data inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /consolidado/relatorio:
+    get:
+      tags:
+        - Consolidado
+      summary: Relatório por Período
+      description: Gera relatório consolidado para um período de datas
+      operationId: gerarRelatorio
+      parameters:
+        - name: data_inicio
+          in: query
+          required: true
+          description: Data início do período
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: data_fim
+          in: query
+          required: true
+          description: Data fim do período
+          schema:
+            type: string
+            format: date
+          example: "2024-01-31"
+        - name: formato
+          in: query
+          description: Formato do relatório
+          schema:
+            type: string
+            enum: [json, csv, pdf]
+            default: json
+        - name: incluir_detalhes
+          in: query
+          description: Incluir saldos diários detalhados
+          schema:
+            type: boolean
+            default: false
+        - name: agrupar_por
+          in: query
+          description: Agrupar dados por período
+          schema:
+            type: string
+            enum: [dia, semana, mes]
+            default: dia
+        - name: salvar_s3
+          in: query
+          description: Salvar cópia no S3 para backup
+          schema:
+            type: boolean
+            default: false
+        - name: email_relatorio
+          in: query
+          description: Email para envio do relatório (formato PDF)
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Relatório gerado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatorioResponse'
+            text/csv:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Parâmetros inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metricas:
+    get:
+      tags:
+        - Analytics
+      summary: Métricas Resumidas
+      description: Obtém métricas consolidadas do sistema
+      operationId: obterMetricas
+      parameters:
+        - name: periodo
+          in: query
+          description: Período de análise
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 1y]
+            default: 30d
+        - name: incluir_tendencias
+          in: query
+          description: Incluir análise de tendências
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Métricas do sistema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricasResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key para autenticação
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT para autenticação
+
+  schemas:
+    # Requests
+    CriarLancamentoRequest:
+      type: object
+      required:
+        - tipo
+        - valor
+        - descricao
+      properties:
+        tipo:
+          type: string
+          enum: [CREDITO, DEBITO]
+          description: Tipo do lançamento
+          example: "CREDITO"
+        valor:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 999999999.99
+          description: Valor do lançamento
+          example: 1500.50
+        descricao:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Descrição do lançamento
+          example: "Pagamento recebido do cliente"
+        categoria:
+          type: string
+          maxLength: 50
+          description: Categoria do lançamento
+          default: "GERAL"
+          example: "VENDAS"
+        data:
+          type: string
+          format: date-time
+          description: Data/hora do lançamento (ISO 8601)
+          example: "2024-01-15T14:30:00Z"
+        tags:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+          description: Tags para classificação
+          example: ["cliente-vip", "pagamento-antecipado"]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Dados adicionais em formato chave-valor
+          example:
+            cliente_id: "12345"
+            pedido_id: "PED-001"
+
+    # Core Models
+    Lancamento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID único do lançamento
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        tipo:
+          type: string
+          enum: [CREDITO, DEBITO]
+          example: "CREDITO"
+        valor:
+          type: number
+          format: double
+          example: 1500.50
+        descricao:
+          type: string
+          example: "Pagamento recebido do cliente"
+        categoria:
+          type: string
+          example: "VENDAS"
+        data:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:00Z"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["cliente-vip"]
+        metadata:
+          type: object
+          additionalProperties: true
+        data_criacao:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:01Z"
+        data_atualizacao:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:01Z"
+        status:
+          type: string
+          enum: [ATIVO, CANCELADO]
+          example: "ATIVO"
+
+    SaldoDiario:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+          example: "2024-01-15"
+        saldo_inicial:
+          type: number
+          format: double
+          example: 10000.00
+        movimentacao:
+          type: object
+          properties:
+            total_creditos:
+              type: number
+              format: double
+              example: 5500.00
+            total_debitos:
+              type: number
+              format: double
+              example: 2300.00
+            saldo_liquido:
+              type: number
+              format: double
+              example: 3200.00
+        saldo_final:
+          type: number
+          format: double
+          example: 13200.00
+        estatisticas:
+          type: object
+          properties:
+            quantidade_lancamentos:
+              type: integer
+              example: 12
+            quantidade_creditos:
+              type: integer
+              example: 8
+            quantidade_debitos:
+              type: integer
+              example: 4
+            ticket_medio_credito:
+              type: number
+              format: double
+              example: 687.50
+            ticket_medio_debito:
+              type: number
+              format: double
+              example: 575.00
+        categorias:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              creditos:
+                type: number
+                format: double
+              debitos:
+                type: number
+                format: double
+              saldo:
+                type: number
+                format: double
+        ultima_atualizacao:
+          type: string
+          format: date-time
+          example: "2024-01-15T15:30:00Z"
+        fonte_dados:
+          type: string
+          enum: [cache, database]
+          example: "cache"
+
+    # Responses
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:00:00Z"
+        environment:
+          type: string
+          example: "production"
+        version:
+          type: string
+          example: "1.0.0"
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+            cache:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+            queue:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+
+    LancamentoCriadoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Lançamento criado com sucesso"
+        data:
+          $ref: '#/components/schemas/Lancamento'
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:01Z"
+
+    LancamentoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Lancamento'
+        timestamp:
+          type: string
+          format: date-time
+
+    ListaLancamentosResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            lancamentos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Lancamento'
+            pagination:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  example: 150
+                limit:
+                  type: integer
+                  example: 50
+                offset:
+                  type: integer
+                  example: 0
+                has_more:
+                  type: boolean
+                  example: true
+            summary:
+              type: object
+              properties:
+                total_creditos:
+                  type: number
+                  format: double
+                  example: 15000.00
+                total_debitos:
+                  type: number
+                  format: double
+                  example: 8500.00
+                saldo_liquido:
+                  type: number
+                  format: double
+                  example: 6500.00
+                quantidade_total:
+                  type: integer
+                  example: 150
+        timestamp:
+          type: string
+          format: date-time
+
+    SaldoDiarioResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        tipo:
+          type: string
+          example: "saldo_diario"
+        data:
+          $ref: '#/components/schemas/SaldoDiario'
+        timestamp:
+          type: string
+          format: date-time
+
+    RelatorioResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        tipo:
+          type: string
+          example: "relatorio_periodo"
+        data:
+          type: object
+          properties:
+            periodo:
+              type: object
+              properties:
+                inicio:
+                  type: string
+                  format: date
+                  example: "2024-01-01"
+                fim:
+                  type: string
+                  format: date
+                  example: "2024-01-31"
+                dias_uteis:
+                  type: integer
+                  example: 22
+                quantidade_dias:
+                  type: integer
+                  example: 31
+            resumo_financeiro:
+              type: object
+              properties:
+                saldo_inicial_periodo:
+                  type: number
+                  format: double
+                  example: 5000.00
+                saldo_final_periodo:
+                  type: number
+                  format: double
+                  example: 25000.00
+                total_creditos_periodo:
+                  type: number
+                  format: double
+                  example: 45000.00
+                total_debitos_periodo:
+                  type: number
+                  format: double
+                  example: 25000.00
+                variacao_liquida:
+                  type: number
+                  format: double
+                  example: 20000.00
+                percentual_crescimento:
+                  type: number
+                  format: double
+                  example: 400.0
+            saldos_diarios:
+              type: array
+              items:
+                $ref: '#/components/schemas/SaldoDiario'
+        metadados:
+          type: object
+          properties:
+            gerado_em:
+              type: string
+              format: date-time
+            tempo_processamento_ms:
+              type: integer
+            fonte_dados:
+              type: string
+            versao_relatorio:
+              type: string
+
+    MetricasResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            periodo_analise:
+              type: string
+              example: "30d"
+            resumo:
+              type: object
+              properties:
+                total_lancamentos:
+                  type: integer
+                  example: 1250
+                total_creditos:
+                  type: number
+                  format: double
+                  example: 125000.00
+                total_debitos:
+                  type: number
+                  format: double
+                  example: 75000.00
+                saldo_liquido:
+                  type: number
+                  format: double
+                  example: 50000.00
+                crescimento_percentual:
+                  type: number
+                  format: double
+                  example: 15.5
+
+    # Error Models
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "INTERNAL_ERROR"
+        message:
+          type: string
+          example: "Erro interno do servidor"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:01Z"
+        request_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Dados inválidos fornecidos"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "valor"
+              message:
+                type: string
+                example: "Valor deve ser maior que zero"
+              code:
+                type: string
+                example: "INVALID_VALUE"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T14:30:01Z"
+
+  examples:
+    LancamentoCredito:
+      summary: Lançamento de Crédito
+      value:
+        tipo: "CREDITO"
+        valor: 1500.50
+        descricao: "Pagamento recebido do cliente ABC"
+        categoria: "VENDAS"
+        tags: ["cliente-vip", "pagamento-antecipado"]
+        metadata:
+          cliente_id: "12345"
+          vendedor_id: "67890"
+
+    LancamentoDebito:
+      summary: Lançamento de Débito
+      value:
+        tipo: "DEBITO"
+        valor: 750.00
+        descricao: "Pagamento fornecedor XYZ"
+        categoria: "DESPESAS"
+        tags: ["fornecedor", "material-escritorio"]
+
+  headers:
+    X-RateLimit-Limit:
+      description: Limite de requisições por período
+      schema:
+        type: integer
+      example: 1000
+
+    X-RateLimit-Remaining:
+      description: Requisições restantes no período atual
+      schema:
+        type: integer
+      example: 999
+
+    X-RateLimit-Reset:
+      description: Timestamp de reset do rate limit
+      schema:
+        type: integer
+      example: 1642248000
+
+    X-Request-ID:
+      description: ID único da requisição para rastreamento
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "NOT_FOUND"
+            message: "Recurso não encontrado"
+            timestamp: "2024-01-15T14:30:01Z"
+
+    Unauthorized:
+      description: Autenticação necessária
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "UNAUTHORIZED"
+            message: "API Key inválida ou ausente"
+            timestamp: "2024-01-15T14:30:01Z"
+
+    RateLimitExceeded:
+      description: Rate limit excedido
+      headers:
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "RATE_LIMIT_EXCEEDED"
+            message: "Limite de requisições excedido. Tente novamente em alguns segundos."
+            timestamp: "2024-01-15T14:30:01Z"
+
+tags:
+  - name: System
+    description: Endpoints de sistema e monitoramento
+  - name: Lançamentos
+    description: Gerenciamento de lançamentos financeiros
+  - name: Consolidado
+    description: Consultas de saldos e relatórios consolidados
+  - name: Analytics
+    description: Métricas e análises do sistema
