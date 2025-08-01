@@ -4,7 +4,7 @@ from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 from configuration import Config
 from sqs import handle_sqs_event
-from utils import handle_http_request, create_response
+from utils import create_response, route_http_request
 
 patch_all()
 config = Config()
@@ -24,7 +24,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         elif 'httpMethod' in event:
             # Requisição HTTP do API Gateway
-            return handle_http_request(event)
+            return route_http_request(event)
 
         else:
             # Evento direto (para testes)
