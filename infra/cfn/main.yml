@@ -19,6 +19,9 @@ Parameters:
   AlertEmail:
     Type: String
 
+  BucketCFN:
+    Type: String
+
   CacheNodeType:
       Type: String
       Default: 'cache.t3.micro'
@@ -29,7 +32,7 @@ Resources:
   NetworkStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/network.yml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/network.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -41,7 +44,7 @@ Resources:
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/securitygroup.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/securitygroup.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -57,7 +60,7 @@ Resources:
   KmsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/kms.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/kms.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -67,7 +70,7 @@ Resources:
   DynamodbStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/dynamodb.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/dynamodb.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -83,7 +86,7 @@ Resources:
   S3bucketsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/buckets.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/buckets.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -99,7 +102,7 @@ Resources:
   SQSSNSStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/sqs_sns.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/sqs_sns.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -117,7 +120,7 @@ Resources:
   RedisStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/redis.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/redis.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -142,7 +145,7 @@ Resources:
   Secretstack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/secrets.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/secrets.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -167,7 +170,7 @@ Resources:
   Lambdastack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/lambdas.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/lambdas.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -238,7 +241,7 @@ Resources:
   ApiGatewayStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/apigateway.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/apigateway.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
@@ -272,7 +275,7 @@ Resources:
     DependsOn:
       - ApiGatewayStack
     Properties:
-      TemplateURL: "https://s3.amazonaws.com/gft-challenge/infra/cfn/observabilidade.yml"
+      TemplateURL: "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/observabilidade.yml"
       Parameters:
         ProjectName: 
           Ref: ProjectName
