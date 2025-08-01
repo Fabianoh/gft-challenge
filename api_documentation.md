@@ -48,7 +48,7 @@ GET /health
 '''json
 {
   "status": "healthy",
-  "timestamp": "2024-01-15T10:00:00Z",
+  "timestamp": "2025-07-30T10:00:00Z",
   "environment": "production",
   "version": "1.0.0",
   "services": {
@@ -84,7 +84,7 @@ Content-Type: application/json
   "valor": 1500.50,
   "descricao": "Pagamento recebido do cliente",
   "categoria": "VENDAS",
-  "data": "2024-01-15T14:30:00Z",
+  "data": "2025-07-30T14:30:00Z",
   "tags": ["cliente-vip", "pagamento-antecipado"],
   "metadata": {
     "cliente_id": "12345",
@@ -119,16 +119,16 @@ Content-Type: application/json
     "valor": 1500.50,
     "descricao": "Pagamento recebido do cliente",
     "categoria": "VENDAS",
-    "data": "2024-01-15T14:30:00Z",
+    "data": "2025-07-30T14:30:00Z",
     "tags": ["cliente-vip", "pagamento-antecipado"],
     "metadata": {
       "cliente_id": "12345",
       "pedido_id": "PED-001"
     },
-    "data_criacao": "2024-01-15T14:30:01Z",
+    "data_criacao": "2025-07-30T14:30:01Z",
     "status": "ATIVO"
   },
-  "timestamp": "2024-01-15T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01Z"
 }
 '''
 
@@ -153,7 +153,7 @@ Content-Type: application/json
       "code": "INVALID_ENUM"
     }
   ],
-  "timestamp": "2024-01-15T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01Z"
 }
 '''
 
@@ -176,7 +176,7 @@ Recupera uma lista de lançamentos com filtros opcionais.
 #### Request
 
 '''http
-GET /lancamentos?data_inicio=2024-01-01&data_fim=2024-01-31&tipo=CREDITO&categoria=VENDAS&limit=50&offset=0
+GET /lancamentos?data_inicio=2025-07-01&data_fim=2025-07-31&tipo=CREDITO&categoria=VENDAS&limit=50&offset=0
 '''
 
 #### Query Parameters
@@ -207,9 +207,9 @@ GET /lancamentos?data_inicio=2024-01-01&data_fim=2024-01-31&tipo=CREDITO&categor
         "valor": 1500.50,
         "descricao": "Pagamento recebido do cliente",
         "categoria": "VENDAS",
-        "data": "2024-01-15T14:30:00Z",
+        "data": "2025-07-30T14:30:00Z",
         "tags": ["cliente-vip"],
-        "data_criacao": "2024-01-15T14:30:01Z"
+        "data_criacao": "2025-07-30T14:30:01Z"
       }
     ],
     "pagination": {
@@ -225,7 +225,7 @@ GET /lancamentos?data_inicio=2024-01-01&data_fim=2024-01-31&tipo=CREDITO&categor
       "quantidade_total": 150
     }
   },
-  "timestamp": "2024-01-15T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01Z"
 }
 '''
 
@@ -261,17 +261,17 @@ GET /lancamentos/{id}
     "valor": 1500.50,
     "descricao": "Pagamento recebido do cliente",
     "categoria": "VENDAS",
-    "data": "2024-01-15T14:30:00Z",
+    "data": "2025-07-30T14:30:00Z",
     "tags": ["cliente-vip", "pagamento-antecipado"],
     "metadata": {
       "cliente_id": "12345",
       "pedido_id": "PED-001"
     },
-    "data_criacao": "2024-01-15T14:30:01Z",
-    "data_atualizacao": "2024-01-15T14:30:01Z",
+    "data_criacao": "2025-07-30T14:30:01Z",
+    "data_atualizacao": "2025-07-30T14:30:01Z",
     "status": "ATIVO"
   },
-  "timestamp": "2024-01-15T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01Z"
 }
 '''
 
@@ -284,7 +284,7 @@ GET /lancamentos/{id}
   "success": false,
   "error": "NOT_FOUND",
   "message": "Lançamento não encontrado",
-  "timestamp": "2024-01-15T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01Z"
 }
 '''
 
@@ -298,7 +298,7 @@ Obtém o saldo consolidado para uma data específica.
 #### Request
 
 '''http
-GET /consolidado?data=2024-01-15
+GET /consolidado?data=2025-07-30
 '''
 
 #### Query Parameters
@@ -318,7 +318,7 @@ GET /consolidado?data=2024-01-15
   "success": true,
   "tipo": "saldo_diario",
   "data": {
-    "data": "2024-01-15",
+    "data": "2025-07-30",
     "saldo_inicial": 10000.00,
     "movimentacao": {
       "total_creditos": 5500.00,
@@ -345,17 +345,17 @@ GET /consolidado?data=2024-01-15
         "saldo": -1800.00
       }
     },
-    "ultima_atualizacao": "2024-01-15T15:30:00Z",
+    "ultima_atualizacao": "2025-07-30T15:30:00Z",
     "fonte_dados": "cache"
   },
-  "timestamp": "2024-01-15T15:30:01Z"
+  "timestamp": "2025-07-30T15:30:01Z"
 }
 '''
 
 #### Com Detalhes
 
 '''http
-GET /consolidado?data=2024-01-15&incluir_detalhes=true
+GET /consolidado?data=2025-07-30&incluir_detalhes=true
 '''
 
 '''json
@@ -363,7 +363,7 @@ GET /consolidado?data=2024-01-15&incluir_detalhes=true
   "success": true,
   "tipo": "saldo_diario",
   "data": {
-    "data": "2024-01-15",
+    "data": "2025-07-30",
     "saldo_inicial": 10000.00,
     "saldo_final": 13200.00,
     "movimentacao": {
@@ -378,7 +378,7 @@ GET /consolidado?data=2024-01-15&incluir_detalhes=true
         "valor": 1500.50,
         "descricao": "Pagamento cliente",
         "categoria": "VENDAS",
-        "data": "2024-01-15T09:30:00Z"
+        "data": "2025-07-30T09:30:00Z"
       }
     ]
   }
@@ -395,7 +395,7 @@ Gera relatório consolidado para um período de datas.
 #### Request
 
 '''http
-GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=json&salvar_s3=true
+GET /consolidado/relatorio?data_inicio=2025-07-01&data_fim=2027-07-31&formato=json&salvar_s3=true
 '''
 
 #### Query Parameters
@@ -420,8 +420,8 @@ GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=js
   "tipo": "relatorio_periodo",
   "data": {
     "periodo": {
-      "inicio": "2024-01-01",
-      "fim": "2024-01-31",
+      "inicio": "2025-07-01",
+      "fim": "2024-07-31",
       "dias_uteis": 22,
       "quantidade_dias": 31
     },
@@ -439,7 +439,7 @@ GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=js
       "media_debitos_dia": 892.86,
       "maior_saldo_diario": 25000.00,
       "menor_saldo_diario": 5000.00,
-      "dia_maior_movimentacao": "2024-01-25"
+      "dia_maior_movimentacao": "2025-07-25"
     },
     "categorias_periodo": {
       "VENDAS": {
@@ -463,7 +463,7 @@ GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=js
     },
     "saldos_diarios": [
       {
-        "data": "2024-01-01",
+        "data": "2025-07-01",
         "saldo_inicial": 5000.00,
         "total_creditos": 1200.00,
         "total_debitos": 300.00,
@@ -473,7 +473,7 @@ GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=js
     ]
   },
   "metadados": {
-    "gerado_em": "2024-02-01T10:00:00Z",
+    "gerado_em": "2025-07-01T10:00:00Z",
     "tempo_processamento_ms": 1250,
     "fonte_dados": "database",
     "versao_relatorio": "1.0"
@@ -481,7 +481,7 @@ GET /consolidado/relatorio?data_inicio=2024-01-01&data_fim=2024-01-31&formato=js
   "arquivos": {
     "s3_backup": {
       "bucket": "relatorios-fluxo-caixa",
-      "key": "2024/01/relatorio_2024-01-01_2024-01-31_20240201100000.json",
+      "key": "2025/07/relatorio_2025-07-01_2025-07-31_20240201100000.json",
       "url_presigned": "https://s3.amazonaws.com/..."
     }
   }
@@ -625,7 +625,7 @@ Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key
       "code": "VALIDATION_CODE"
     }
   ],
-  "timestamp": "2024-01-15T14:30:01Z",
+  "timestamp": "2025-07-30T14:30:01Z",
   "request_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 '''
