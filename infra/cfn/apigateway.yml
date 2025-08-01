@@ -501,16 +501,24 @@ Resources:
     DependsOn:
       - MetricasResource
 
-   
+     
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment    
     Properties:
       RestApiId: !Ref ApiGateway
     DependsOn:
       - LancamentosMethod
+      - LancamentoListGetMethod
+      - LancamentosOptionsMethod
+      - LancamentoIndividualOptionsMethod
+      - LancamentoIndividualGetMethod      
       - ConsolidadoMethod
+      - ConsolidadoRelatorioMethod
+      - ConsolidadoRelatorioOptionsMethod
       - HealthCheckMethod
-
+      - MetricasMethod
+      - MetricasOptionsMethod
+      
 
   # Stage com configurações de segurança
   ApiGatewayStage:
