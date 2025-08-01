@@ -95,6 +95,11 @@ Cliente → Cloudfront -> S3 Website -> API Gateway → Lambda Lançamentos → 
 - **PASSO 1**:
 Clone o repositório: https://github.com/Fabianoh/gft-challenge
 
+Aqui você vai encontrar as seguintes pastas:
+    - ***/apps/***: Contém o código fonte das funções lambdas de Lançamento e Consolidado
+    - ***/infra/cfn***: Contém todos os scripts cloudformation para criação de toda a infra como código.
+    - ***/infra/lambdas***: Contém arquivos .zip referentes às funções lambdas/python usadas para Lançamento e Consolidado, bem como layers usadas como libs dessas funções.
+
 - **PASSO 2**
 Crie um bucket e uma role, cujo Principal seja cloudformation.amazonaws.com. Essa role deverá ter todas as permissões para que você crie os recursos AWS necessários nesse projeto, via cloudformation.
 PS: se quiser, eu posso lhe passar o script dessa role.
