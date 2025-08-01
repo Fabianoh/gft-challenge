@@ -110,7 +110,7 @@ Se quiser, você pode usar o seguinte comando AWS CLI:
 aws s3 sync gft-challenge/ s3://<NOME_BUCKET>
 Substitua <NOME_BUCKET> pelo nome do bucket criado no passo 2.
 
-- **PASSO **
+- **PASSO 4**
 Execute o comando AWS CLI abaixo:
 
 aws cloudformation create-stack --stack-name gft-challenge --template-url https://s3.amazonaws.com/gft-challenge/infra/cfn/main.yml --parameters ParameterKey=AlertEmail,ParameterValue=fabianoh.alves@gmail.com ParameterKey=BucketCFN,ParameterValue=gft-challenge --capabilities CAPABILITY_NAMED_IAM
