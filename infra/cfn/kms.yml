@@ -11,6 +11,13 @@ Resources:
       Type: AWS::KMS::Key
       Properties:
         Description: 'Chave de criptografia para o sistema de controle de fluxo de caixa'
+        # Rotação automática anual: a AWS gera novo material criptográfico e
+        # mantém o anterior para decifrar dados antigos. É transparente para a
+        # aplicação, sem custo adicional, e é controle esperado em auditoria.
+        EnableKeyRotation: true
+        # Janela de espera antes da exclusão definitiva. Protege contra remoção
+        # acidental da chave, que tornaria todos os dados cifrados irrecuperáveis.
+        PendingWindowInDays: 30
         KeyPolicy:
           Statement:
             - Effect: Allow

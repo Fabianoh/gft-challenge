@@ -15,6 +15,28 @@ Parameters:
     Type: String
   LambdaLancamentosArn:
     Type: String
+  LambdaAuthorizerArn:
+    Type: String
+
+  RetencaoLogsEmDias:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365]
+
+  # Throttling separado por servico. Antes existia um unico limite no stage
+  # inteiro, entao trafego no consolidado consumia a cota dos lancamentos e um
+  # pico de leitura podia causar HTTP 429 no caminho de receita.
+  LimiteRpsLancamentos:
+    Type: Number
+    Default: 200
+    Description: Requisicoes por segundo no dominio de lancamentos
+
+  LimiteRpsConsolidado:
+    Type: Number
+    Default: 80
+    Description: >-
+      Requisicoes por segundo no dominio de consolidado. Acima dos 50 rps do
+      requisito nao-funcional, com folga para rajada.
 
 Resources:
   APIGatewayRole:
@@ -89,6 +111,74 @@ Resources:
           Value: !Ref Environment
 
   # Request Validator
+  # ===========================================================================
+  # Autenticacao
+  # ===========================================================================
+  # Tipo REQUEST (e nao TOKEN) porque o autorizador decide o escopo exigido a
+  # partir do metodo e do caminho, e nao apenas do token. Um PDV com escopo
+  # `lancamentos:write` pode gravar mas nao pode ler o saldo consolidado — essa
+  # decisao depende de saber qual recurso esta sendo acessado.
+  ApiAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-jwt-authorizer'
+      RestApiId: !Ref ApiGateway
+      Type: REQUEST
+      IdentitySource: method.request.header.Authorization
+      AuthorizerUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaAuthorizerArn}/invocations'
+      AuthorizerCredentials: !GetAtt AuthorizerInvocationRole.Arn
+      # Cache do resultado por identidade. Sem cache, o autorizador roda em toda
+      # requisicao e vira custo e latencia fixos no caminho critico.
+      AuthorizerResultTtlInSeconds: 300
+
+  # Role que o API Gateway assume para invocar o autorizador.
+  AuthorizerInvocationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-authorizer-invocation'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvocaAuthorizer
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Ref LambdaAuthorizerArn
+
+  # Respostas 401 e 403 precisam carregar os cabecalhos de CORS. Sem isso, o
+  # navegador reporta erro de CORS em vez do erro de autenticacao real, e o
+  # desenvolvedor do cliente perde tempo investigando o problema errado.
+  RespostaNaoAutorizado:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResponseType: UNAUTHORIZED
+      StatusCode: '401'
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+      ResponseTemplates:
+        application/json: '{"error":"Nao autorizado","message":"Token ausente ou invalido"}'
+
+  RespostaAcessoNegado:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResponseType: ACCESS_DENIED
+      StatusCode: '403'
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+      ResponseTemplates:
+        application/json: '{"error":"Acesso negado","message":"Escopo insuficiente para este recurso"}'
+
   RequestValidator:
     Type: AWS::ApiGateway::RequestValidator
     Properties:
@@ -193,7 +283,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref LancamentosResource
       HttpMethod: POST
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestValidatorId: !Ref RequestValidator
       RequestModels:
         application/json: !Ref LancamentoModel
@@ -226,7 +317,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref LancamentosResource
       HttpMethod: GET
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestParameters:
         method.request.path.id: true
       Integration:
@@ -253,7 +345,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref LancamentoIndividualResource
       HttpMethod: GET
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestParameters:
         method.request.path.id: true
       Integration:
@@ -334,7 +427,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref ConsolidadoResource
       HttpMethod: GET
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestParameters:
         method.request.querystring.data: false
       Integration:
@@ -369,7 +463,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref ConsolidadoRelatorioResource
       HttpMethod: GET
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestParameters:
         method.request.querystring.data_inicio: true
         method.request.querystring.data_fim: true
@@ -436,7 +531,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: 200
             ResponseTemplates:
-              application/json: |
+              application/json: !Sub |
                 {
                   "status": "healthy",
                   "timestamp": "$context.requestTime",
@@ -456,7 +551,8 @@ Resources:
       RestApiId: !Ref ApiGateway
       ResourceId: !Ref MetricasResource
       HttpMethod: GET
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref ApiAuthorizer
       RequestParameters:
         method.request.querystring.periodo: false
         method.request.querystring.incluir_tendencias: false
@@ -520,6 +616,12 @@ Resources:
       - MetricasOptionsMethod
       
 
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${ProjectName}-${Environment}'
+      RetentionInDays: !Ref RetencaoLogsEmDias
+
   # Stage com configurações de segurança
   ApiGatewayStage:
     Type: AWS::ApiGateway::Stage
@@ -528,6 +630,7 @@ Resources:
       DeploymentId: !Ref ApiGatewayDeployment
       StageName: !Ref Environment      
       MethodSettings:
+        # Padrao conservador para qualquer recurso nao listado abaixo.
         - ResourcePath: '/*'
           HttpMethod: '*'
           LoggingLevel: INFO
@@ -535,8 +638,46 @@ Resources:
           MetricsEnabled: true
           ThrottlingRateLimit: 100
           ThrottlingBurstLimit: 200
+
+        # Lancamentos: cota propria e mais alta. E o caminho de receita — uma
+        # venda nao registrada e irrecuperavel.
+        - ResourcePath: '/lancamentos'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref LimiteRpsLancamentos
+          ThrottlingBurstLimit: !Ref LimiteRpsLancamentos
+
+        - ResourcePath: '/lancamentos/{id}'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref LimiteRpsLancamentos
+          ThrottlingBurstLimit: !Ref LimiteRpsLancamentos
+
+        # Consolidado: cota separada, dimensionada para os 50 rps do requisito
+        # nao-funcional com folga. Um pico aqui nao consome a cota acima.
+        - ResourcePath: '/consolidado'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref LimiteRpsConsolidado
+          ThrottlingBurstLimit: !Ref LimiteRpsConsolidado
+
+        - ResourcePath: '/consolidado/relatorio'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref LimiteRpsConsolidado
+          ThrottlingBurstLimit: !Ref LimiteRpsConsolidado
       AccessLogSetting:
-        #DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
+        # Estava comentado: o log de acesso nao ia para lugar nenhum, e com ele
+        # se perdia a rastreabilidade de borda (requestId, IP, status, latencia).
+        DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
         Format: >
           {"requestId": "$context.requestId", "ip": "$context.identity.sourceIp", "caller": "$context.identity.caller", "user": "$context.identity.user", "requestTime": "$context.requestTime", "httpMethod": "$context.httpMethod", "resourcePath": "$context.resourcePath", "status": "$context.status", "protocol": "$context.protocol", "responseLength": "$context.responseLength", "error": "$context.error.message", "integrationError": "$context.integration.error"}
       Tags:
@@ -575,18 +716,50 @@ Resources:
       DefaultAction:
         Allow: {}
       Rules:
-        - Name: RateLimitRule
+        # Rate limiting por IDENTIDADE, nao por IP.
+        #
+        # A regra anterior usava AggregateKeyType: IP com Limit 1000. No WAFv2 o
+        # Limit e por janela de 5 minutos, ou seja ~3,3 req/s por IP. Isso
+        # bloquearia exatamente a carga que o requisito nao-funcional exige: 50
+        # rps sao 15.000 requisicoes em 5 minutos, quinze vezes o limite. E o
+        # cenario e o comum, nao o excepcional — uma rede de lojas sai por um NAT
+        # corporativo e todo o trafego chega com um unico IP de origem.
+        #
+        # Agregar pelo cabecalho Authorization limita o abuso de um cliente
+        # individual sem punir um cliente legitimo de alto volume.
+        - Name: RateLimitPorIdentidade
           Priority: 1
           Statement:
             RateBasedStatement:
-              Limit: 1000
+              Limit: 20000            # ~66 req/s por identidade, folga sobre os 50 rps
+              AggregateKeyType: CUSTOM_KEYS
+              CustomKeys:
+                - Header:
+                    Name: authorization
+                    TextTransformations:
+                      - Priority: 0
+                        Type: NONE
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitPorIdentidade
+
+        # Rede de seguranca por IP, com teto bem mais alto: protege contra flood
+        # de origem nao autenticada sem interferir no trafego legitimo.
+        - Name: RateLimitPorIpAmplo
+          Priority: 4
+          Statement:
+            RateBasedStatement:
+              Limit: 50000
               AggregateKeyType: IP
           Action:
             Block: {}
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
-            MetricName: RateLimitRule
+            MetricName: RateLimitPorIpAmplo
         - Name: SQLInjectionRule
           Priority: 2
           Statement:

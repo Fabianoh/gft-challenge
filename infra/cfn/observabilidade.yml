@@ -19,6 +19,18 @@ Parameters:
     Type: String
   ConsolidacaoQueue:
     Type: String
+
+  # Nomes reais dos recursos. As dimensoes de alarme do CloudWatch exigem o NOME
+  # da funcao e da fila; passar ARN faz o alarme nunca casar com a metrica e
+  # ficar preso em INSUFFICIENT_DATA — falha silenciosa do proprio monitoramento.
+  LambdaLancamentosName:
+    Type: String
+  LambdaConsolidadoName:
+    Type: String
+  ConsolidacaoQueueRealName:
+    Type: String
+  ConsolidacaoDlqRealName:
+    Type: String
   
 
 Resources:
@@ -38,7 +50,7 @@ Resources:
         - !Ref NotificationTopic
       Dimensions:
         - Name: FunctionName
-          Value: !Ref LambdaLancamentos
+          Value: !Ref LambdaLancamentosName
 
   LambdaConsolidadoErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -56,7 +68,7 @@ Resources:
         - !Ref NotificationTopic
       Dimensions:
         - Name: FunctionName
-          Value: !Ref LambdaConsolidado
+          Value: !Ref LambdaConsolidadoName
 
   APIGateway4XXErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -142,7 +154,7 @@ Resources:
     Properties:
       AlarmName: !Sub '${ProjectName}-${Environment}-sqs-queue-depth'
       AlarmDescription: 'Alarme para acúmulo de mensagens na fila SQS'
-      MetricName: ApproximateNumberOfVisibleMessages
+      MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
       Statistic: Average
       Period: 300
@@ -153,7 +165,136 @@ Resources:
         - !Ref NotificationTopic
       Dimensions:
         - Name: QueueName
-          Value: !Ref ConsolidacaoQueue
+          Value: !Ref ConsolidacaoQueueRealName
+
+  # ===========================================================================
+  # Alarmes do fluxo assincrono
+  # ===========================================================================
+
+  # O alarme mais importante do sistema.
+  #
+  # Uma mensagem na DLQ significa um lancamento que NUNCA entrou no saldo: o
+  # comerciante tem um numero errado no relatorio e ninguem foi avisado. O
+  # limiar e zero de proposito — nao existe quantidade aceitavel de lancamentos
+  # perdidos em sistema financeiro.
+  DLQMensagensAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-dlq-com-mensagem'
+      AlarmDescription: >-
+        SEVERIDADE 1. Ha lancamento que falhou na consolidacao e nao entrou no
+        saldo. Runbook em docs/06-observabilidade.md.
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: QueueName
+          Value: !Ref ConsolidacaoDlqRealName
+
+  # Traduz em alarme a promessa de consistencia eventual do ADR-005:
+  # "o saldo esta no maximo 30 segundos atrasado".
+  #
+  # Profundidade de fila nao substitui esta metrica: uma fila com 5 mensagens
+  # paradas ha 20 minutos e muito pior que uma com 500 escoando em 3 segundos,
+  # e o alarme de profundidade so enxergaria a segunda.
+  DefasagemSaldoAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-defasagem-do-saldo'
+      AlarmDescription: >-
+        A consolidacao esta atrasada alem da janela declarada de 30s (SLO).
+      MetricName: ApproximateAgeOfOldestMessage
+      Namespace: AWS/SQS
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 30
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: QueueName
+          Value: !Ref ConsolidacaoQueueRealName
+
+  # ===========================================================================
+  # Alarmes de isolamento entre os dominios
+  # ===========================================================================
+  # Sinal direto do modo de falha do requisito nao-funcional principal: o
+  # consolidado drenando a cota de concorrencia e deixando os lancamentos sem
+  # execucao. Sem estes alarmes, o cenario aconteceria sem nenhum aviso — o
+  # cliente veria apenas HTTP 429.
+
+  LancamentosThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-lancamentos-throttled'
+      AlarmDescription: >-
+        SEVERIDADE 1. O caminho de receita esta sendo limitado por concorrencia.
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaLancamentosName
+
+  ConsolidadoThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-consolidado-throttled'
+      AlarmDescription: >-
+        O consumidor atingiu o teto de concorrencia. Esperado sob pico; se
+        persistir, elevar MaximumConcurrency do event source mapping.
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref NotificationTopic
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaConsolidadoName
+
+  # ===========================================================================
+  # Alarme composto
+  # ===========================================================================
+  # Alarme isolado gera ruido; composto gera diagnostico. Uma notificacao com
+  # significado — "a consolidacao esta degradada" — em vez de tres e-mails que o
+  # plantao precisa correlacionar as 3h da manha.
+  ConsolidacaoDegradadaAlarm:
+    Type: AWS::CloudWatch::CompositeAlarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-consolidacao-degradada'
+      AlarmDescription: 'O dominio de consolidacao esta degradado.'
+      AlarmRule: !Sub
+        - '(ALARM("${Dlq}") OR ALARM("${Defasagem}") OR ALARM("${Erros}"))'
+        - Dlq: !Ref DLQMensagensAlarm
+          Defasagem: !Ref DefasagemSaldoAlarm
+          Erros: !Ref LambdaConsolidadoErrorAlarm
+      AlarmActions:
+        - !Ref NotificationTopic
+    DependsOn:
+      - DLQMensagensAlarm
+      - DefasagemSaldoAlarm
+      - LambdaConsolidadoErrorAlarm
 
   # Dashboard personalizado
   CloudWatchDashboard:
