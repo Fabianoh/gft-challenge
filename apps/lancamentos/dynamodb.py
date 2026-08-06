@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
+from excecoes import PersistenciaError
 
 patch_all()
 
@@ -35,6 +36,6 @@ def save_lancamento_to_dynamodb(lancamento_data: Dict[str, Any]) -> str:
         config.logger.info(f"Lançamento salvo com sucesso: {lancamento_id}")
         return lancamento_id
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao salvar no DynamoDB: {str(e)}")
-        raise "Erro ao salvar lançamento"
+        raise PersistenciaError("Erro ao salvar lançamento") from e

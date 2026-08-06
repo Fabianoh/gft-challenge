@@ -68,7 +68,7 @@ def route_http_request(event: Dict[str, Any]) -> Dict[str, Any]:
                 'message': f'Recurso {resource_path} não existe'
             })
         
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro no roteamento: {str(e)}")
         return create_response(500, {
             'error': 'Erro interno',
@@ -236,7 +236,7 @@ def handle_saldo_request(event: Dict[str, Any]) -> Dict[str, Any]:
             'message': str(e)
         })
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro inesperado: {str(e)}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',

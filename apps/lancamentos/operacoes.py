@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from configuration import Config
 from aws_xray_sdk.core import xray_recorder
 from botocore.exceptions import ClientError
+from excecoes import ValidationError, PersistenciaError
 
 config = Config()
 
@@ -24,10 +25,12 @@ def cria_lancamento(event: Dict[str, Any]) -> Dict[str, Any]:
                     'message': 'Body da requisição deve ser um JSON válido'
                 })
 
-        # Validar dados do lançamento
+        # Validar dados do lançamento.
+        # Captura apenas ValidationError: um erro inesperado aqui é falha do
+        # servidor (500) e não deve ser reportado ao cliente como payload inválido.
         try:
             validated_data = validate_lancamento(body)
-        except Exception as e:
+        except ValidationError as e:
             return create_response(400, {
                 'error': 'Dados inválidos',
                 'message': str(e)
@@ -61,7 +64,7 @@ def cria_lancamento(event: Dict[str, Any]) -> Dict[str, Any]:
         config.logger.info(f"Lançamento processado com sucesso: {lancamento_id}")
         return create_response(201, response_body)
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro inesperado: {e}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',
@@ -136,7 +139,7 @@ def get_lancamentos_list(event: Dict[str, Any]) -> Dict[str, Any]:
         })
 
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao listar lançamentos: {e}")
         return create_response(500, {
             'error': 'Erro interno',
@@ -178,7 +181,7 @@ def get_lancamento_individual(event: Dict[str, Any]) -> Dict[str, Any]:
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao buscar lançamento individual: {e}")
         return create_response(500, {
             'error': 'Erro interno',
@@ -321,7 +324,7 @@ def list_lancamentos_with_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
 
     except ClientError as e:
         config.logger.error(f"Erro ao listar lançamentos: {e}")
-        raise "Erro ao acessar dados dos lançamentos"
+        raise PersistenciaError("Erro ao acessar dados dos lançamentos") from e
 
 
 @xray_recorder.capture('get_lancamento_by_id')
@@ -343,4 +346,4 @@ def get_lancamento_by_id(lancamento_id: str) -> Optional[Dict[str, Any]]:
 
     except ClientError as e:
         config.logger.error(f"Erro ao recuperar lançamento: {str(e)}")
-        raise "Erro ao acessar dados do lançamento"
+        raise PersistenciaError("Erro ao acessar dados do lançamento") from e
