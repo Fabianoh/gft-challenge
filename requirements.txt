@@ -1,0 +1,5 @@
+# Dependências de runtime das funções Lambda.
+# Em produção, boto3 já é fornecido pelo runtime da AWS; está aqui para execução local.
+boto3==1.35.76
+redis==5.2.1
+aws-xray-sdk==2.14.0

@@ -1,0 +1,35 @@
+# Infra local mínima para rodar o sistema sem uma conta AWS.
+#
+# Escopo deliberado: só DynamoDB e SQS, que são as dependências do caminho
+# crítico (gravar lançamento -> publicar evento -> consolidar saldo).
+#
+# ElastiCache/Redis não está aqui de propósito: `redis_ops.get_redis_client`
+# conecta com `ssl=True` fixo no código, o que não funciona contra um Redis
+# local sem TLS. O código já trata a ausência do cache com degradação graciosa
+# (segue direto para o DynamoDB), então o fluxo local roda sem ele.
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: gft-dynamodb-local
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  sqs:
+    image: softwaremill/elasticmq-native:1.6.11
+    container_name: gft-sqs-local
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./scripts/elasticmq.conf:/opt/elasticmq.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9324 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
