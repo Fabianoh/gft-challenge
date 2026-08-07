@@ -75,6 +75,7 @@ flowchart TB
         waf["AWS WAF<br/><i>rate limiting, OWASP</i>"]
         gw["API Gateway REST<br/><i>entrada única, validação,<br/>throttling por método</i>"]
         authz["Lambda Authorizer<br/><i>valida JWT e escopos</i>"]
+        segredo[("Secrets Manager<br/><i>chave de assinatura</i>")]
     end
 
     subgraph ctxLanc["Bounded Context: Lançamentos"]
@@ -107,6 +108,7 @@ flowchart TB
     cliente --> waf
     waf --> gw
     gw -.->|"autoriza"| authz
+    authz -.->|"lê segredo"| segredo
     gw -->|"POST /lancamentos"| fnLanc
     gw -->|"GET /consolidado"| fnCons
 
@@ -135,7 +137,7 @@ flowchart TB
     class authz,stream,pipe,bus,dbDedup,cdn alvo
     class fnLanc lanc
     class fnCons cons
-    class dbLanc,dbCons,cache,s3 dados
+    class dbLanc,dbCons,cache,s3,segredo dados
 ```
 
 ### O que sustenta o requisito de isolamento
