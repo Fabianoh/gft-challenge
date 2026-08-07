@@ -123,27 +123,11 @@ de onde decorre toda a arquitetura. Detalhamento em
 
 ### Fluxo
 
-```
-                            ┌──────────┐
-  Cliente ──► CloudFront ──►│   WAF    │──► API Gateway
-                            └──────────┘         │
-                              ┌──────────────────┴──────────────────┐
-                              ▼                                     ▼
-                    ┌──────────────────┐                 ┌──────────────────┐
-                    │ Lambda           │                 │ Lambda           │
-                    │ Lançamentos      │                 │ Consolidado      │
-                    └────────┬─────────┘                 └────────┬─────────┘
-                             │                                    │
-                    ┌────────▼─────────┐                 ┌────────▼─────────┐
-                    │ DynamoDB         │                 │ DynamoDB         │
-                    │ lançamentos      │                 │ consolidado      │
-                    └────────┬─────────┘                 └────────▲─────────┘
-                             │                                    │
-                             │      ┌───────────┐   ┌───────┐     │
-                             └─────►│    SQS    │──►│  DLQ  │     │
-                                    └─────┬─────┘   └───────┘     │
-                                          └────────────────────────┘
-```
+![Arquitetura do sistema de controle de fluxo de caixa](docs/diagramas/arquitetura-fluxo-de-caixa.drawio.svg)
+
+> A imagem é um **SVG editável**: o XML do draw.io está embutido nela, então o
+> mesmo arquivo renderiza aqui e abre no [diagrams.net](https://app.diagrams.net)
+> para edição. Sem duas cópias para manter em sincronia.
 
 O acoplamento entre os dois é **apenas a fila**. Consolidação nunca chama
 Lançamentos.

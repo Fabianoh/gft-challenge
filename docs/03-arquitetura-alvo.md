@@ -6,11 +6,15 @@ Os diagramas seguem o modelo [C4](https://c4model.com), do mais abstrato para o
 mais concreto. Estão em Mermaid, então renderizam direto no GitHub — sem
 depender de ferramenta externa nem de imagem que envelhece separada do texto.
 
-> Existe também uma versão em draw.io com os ícones oficiais da AWS em
-> [`diagramas/arquitetura-fluxo-de-caixa.drawio`](diagramas/arquitetura-fluxo-de-caixa.drawio),
-> mantida como **fonte editável** para apresentação. Os diagramas Mermaid abaixo
-> são a visão canônica: um `.drawio` não renderiza no GitHub, e um diagrama que
-> exige download para ser visto acaba não sendo visto.
+Há também uma visão de implantação com os ícones oficiais da AWS:
+
+![Arquitetura de implantação](diagramas/arquitetura-fluxo-de-caixa.drawio.svg)
+
+> O arquivo é um **SVG editável** — o XML do draw.io está embutido na própria
+> imagem, então ela renderiza no GitHub e abre no
+> [diagrams.net](https://app.diagrams.net) para edição, sem duas cópias
+> divergindo. Os diagramas Mermaid abaixo continuam sendo a visão canônica:
+> vivem no mesmo arquivo do texto e não envelhecem separados dele.
 
 **Convenção usada em todos os diagramas:**
 linha cheia = síncrono · linha tracejada = assíncrono ·
@@ -140,15 +144,18 @@ O único caminho entre os dois contextos é **a fila**, e a seta é de mão úni
 Isso resolve o acoplamento *temporal* — mas não basta. Quatro recursos ainda
 precisam ser segregados:
 
-| Recurso | Controle necessário |
-|---|---|
-| Concorrência Lambda | `ReservedConcurrentExecutions` no produtor (piso garantido) + `ScalingConfig.MaximumConcurrency` no consumidor (teto imposto) |
-| Cota do API Gateway | `MethodSettings` por `ResourcePath`, não um limite único no stage |
-| Base de dados | Cada contexto dono exclusiva da sua tabela |
-| Permissão IAM | Uma role por função |
+| Recurso | Controle | Estado |
+|---|---|:---:|
+| Concorrência Lambda | `ReservedConcurrentExecutions` no produtor (piso garantido) + `ScalingConfig.MaximumConcurrency` no consumidor (teto imposto) | ✅ |
+| Cota do API Gateway | `MethodSettings` por `ResourcePath`, não um limite único no stage | ✅ |
+| Permissão IAM | Uma role por função | ✅ |
+| Base de dados | Cada contexto dono exclusivo da sua tabela | ❌ |
 
-> ⚠️ **Estado atual:** os quatro estão compartilhados. Detalhe em
-> [requisitos e NFRs §2.1](02-requisitos-e-nfrs.md#21-os-dois-requisitos-explícitos-do-enunciado).
+> ⚠️ **A base de dados continua compartilhada:** o consolidado varre a tabela de
+> lançamentos, então suas leituras competem por capacidade com as escritas do
+> caminho de receita. É a última condição em aberto do requisito, e depende da
+> agregação incremental do [ADR-004](adr/0004-agregacao-incremental-vs-recalculo.md).
+> Detalhe em [requisitos e NFRs §2.1](02-requisitos-e-nfrs.md#21-os-dois-requisitos-explícitos-do-enunciado).
 
 ---
 
