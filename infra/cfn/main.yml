@@ -220,6 +220,10 @@ Resources:
           Fn::GetAtt:
             - Secretstack
             - Outputs.DatabaseSecret
+        JwtSecret:
+          Fn::GetAtt:
+            - Secretstack
+            - Outputs.JwtSecret
         RedisEndpoint:
           Fn::GetAtt:
             - RedisStack
@@ -266,7 +270,11 @@ Resources:
         LambdaLancamentosArn:
           Fn::GetAtt:
             - Lambdastack
-            - Outputs.LambdaLancamentosArn        
+            - Outputs.LambdaLancamentosArn
+        LambdaAuthorizerArn:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaAuthorizerArn
     DependsOn:
       - Lambdastack
   
@@ -309,6 +317,22 @@ Resources:
           Fn::GetAtt:
             - SQSSNSStack
             - Outputs.ConsolidacaoQueue
+        LambdaLancamentosName:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaLancamentosName
+        LambdaConsolidadoName:
+          Fn::GetAtt:
+            - Lambdastack
+            - Outputs.LambdaConsolidadoName
+        ConsolidacaoQueueRealName:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoQueueRealName
+        ConsolidacaoDlqRealName:
+          Fn::GetAtt:
+            - SQSSNSStack
+            - Outputs.ConsolidacaoDlqRealName
 
 Outputs:
   ApiGatewayUrl:

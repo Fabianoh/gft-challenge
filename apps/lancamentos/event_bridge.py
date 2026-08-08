@@ -39,6 +39,6 @@ def send_to_eventbridge(lancamento_id: str, lancamento_data: Dict[str, Any]) -> 
 
         config.logger.info(f"Evento enviado para EventBridge: {response['Entries'][0]['EventId']}")
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao enviar para EventBridge: {str(e)}")
         # Não falhar a requisição por erro no EventBridge

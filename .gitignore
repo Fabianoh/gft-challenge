@@ -1,0 +1,23 @@
+# Ambiente Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+tests/carga/resultado-*.json
+
+# Artefatos de build das Lambdas.
+# Os .zip são gerados por `make package` a partir do código-fonte; versionar
+# binário em repositório impede build reproduzível e esconde o que foi implantado.
+dist/
+infra/lambdas/*.zip
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

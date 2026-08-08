@@ -1,202 +1,280 @@
 # API de Controle de Fluxo de Caixa
 
-## 📋 Visão Geral
+Referência dos endpoints REST para registro de lançamentos e consulta do saldo
+consolidado.
 
-A API de Controle de Fluxo de Caixa é um serviço RESTful que permite gerenciar lançamentos financeiros (débitos e créditos) e consultar relatórios consolidados de saldo diário.
+> **Este documento descreve o comportamento real da implementação.** Onde a
+> arquitetura alvo difere do que está implantado, há um aviso explícito. Documento
+> de API que promete o que o código não entrega custa mais caro que documento
+> nenhum — o integrador só descobre em produção.
 
-### Informações Básicas
+---
 
-- **Versão**: v1.0
-- **Protocolo**: HTTPS
-- **Formato**: JSON
-- **Autenticação**: API Key (opcional)
-- **Rate Limiting**: 1000 req/s por IP
+## Visão geral
 
+| | |
+|---|---|
+| Versão | v1 |
+| Protocolo | HTTPS (TLS 1.2+) |
+| Formato | JSON, UTF-8 |
+| Base URL | `https://<api-id>.execute-api.<região>.amazonaws.com/<stage>` |
+| Local | `http://localhost:3000` (ver [README](README.md#como-rodar-localmente)) |
 
-### Headers Obrigatórios
+### Autenticação
 
-'''http
+Todos os endpoints de negócio exigem um token JWT no cabeçalho `Authorization`:
+
+```http
+Authorization: Bearer <token>
+```
+
+A validação é feita por um Lambda Authorizer, que confere assinatura HMAC-SHA256,
+emissor, audiência, expiração e **o escopo exigido pelo recurso**:
+
+| Escopo | Concede |
+|---|---|
+| `lancamentos:write` | `POST /lancamentos` |
+| `lancamentos:read` | `GET /lancamentos`, `GET /lancamentos/{id}` |
+| `consolidado:read` | `GET /consolidado`, `GET /consolidado/relatorio` |
+| `metricas:read` | `GET /metricas` |
+
+Um token com apenas `lancamentos:write` registra vendas mas **não** lê o saldo
+consolidado — é o que impede que um PDV comprometido numa loja exponha a posição
+financeira do negócio inteiro.
+
+Abertos sem token: `GET /health` e os `OPTIONS` de preflight CORS (o navegador
+não envia `Authorization` no preflight).
+
+**Para obter um token de teste:**
+
+```bash
+python scripts/gerar_token.py --projeto gft-challenge --ambiente prod
+```
+
+Restringindo escopos, para demonstrar a autorização por capacidade:
+
+```bash
+python scripts/gerar_token.py --escopos lancamentos:write
+```
+
+> Em produção com provedor de identidade externo, o correto é RS256 com chaves
+> públicas via JWKS. A escolha por HS256 com segredo no Secrets Manager mantém a
+> stack autocontida; a troca é localizada em `_verificar_assinatura`.
+> Ver [docs/07-seguranca.md](docs/07-seguranca.md#4-autenticação-e-autorização--o-desenho-alvo).
+
+> ⚠️ **O ambiente local não aplica autenticação.** O roteador de
+> `scripts/api_local.py` não invoca o authorizer, então os exemplos com `curl`
+> sem token funcionam localmente mas não contra a API implantada.
+
+### Limites de requisição
+
+| Camada | Limite real | Observação |
+|---|---|---|
+| API Gateway — `/lancamentos` | **200 req/s** | Cota própria do caminho de receita |
+| API Gateway — `/consolidado` | **80 req/s** | Acima dos 50 rps do requisito, com folga |
+| WAF | **20.000 requisições por identidade a cada 5 minutos** (≈66 req/s) | Bloqueio, não throttling |
+| WAF | 50.000 requisições por IP a cada 5 minutos | Rede de segurança contra flood |
+
+> O rate limiting do WAF agrega pelo cabeçalho `Authorization`, e não por IP.
+> Agregar por IP bloquearia um cliente legítimo de alto volume — uma rede de
+> lojas saindo por um único NAT corporativo atingiria o limite muito antes dos
+> 50 rps previstos no requisito não-funcional.
+
+O throttling do API Gateway é **separado por serviço**: 200 rps em `/lancamentos`
+e 80 rps em `/consolidado`. Assim um pico de leitura não consome a cota do
+caminho de receita.
+
+### Cabeçalhos
+
+```http
 Content-Type: application/json
 Accept: application/json
-'''
+```
 
-### Headers Opcionais
+| Cabeçalho | Estado | Uso |
+|---|---|---|
+| `Authorization: Bearer <jwt>` | ✅ **obrigatório** | Autenticação e autorização |
+| `Idempotency-Key: <uuid>` | ❌ não implementado | Evitar duplicata em retentativa |
+| `X-Correlation-Id: <uuid>` | ⚠️ não propagado | Rastreabilidade ponta a ponta |
 
-'''http
-X-API-Key: sua-api-key-aqui
-X-Request-ID: uuid-para-rastreamento
-'''
+### CORS
+
+Respostas incluem `Access-Control-Allow-Origin: *`.
+
+> ⚠️ Origem irrestrita não é adequada para API financeira. Deve ser lista
+> explícita de domínios confiáveis.
 
 ---
 
-## 🔗 Endpoints
-# ############################################################################################################
-### 1. Health Check
-# ############################################################################################################
-Verifica se a API está funcionando corretamente.
+## Endpoints
 
-#### Request
+| Método | Recurso | Descrição |
+|---|---|---|
+| `GET` | `/health` | Verificação de disponibilidade |
+| `POST` | `/lancamentos` | Registra débito ou crédito |
+| `GET` | `/lancamentos` | Lista com filtros e paginação |
+| `GET` | `/lancamentos/{id}` | Consulta individual |
+| `GET` | `/consolidado` | Saldo diário |
+| `GET` | `/consolidado/relatorio` | Relatório por período |
+| `GET` | `/metricas` | Métricas agregadas |
 
-'''http
+---
+
+## 1. Health Check
+
+```http
 GET /health
-'''
+```
 
-#### Response
+**200 OK**
 
-**Status Code**: `200 OK`
-
-'''json
+```json
 {
   "status": "healthy",
-  "timestamp": "2025-07-30T10:00:00Z",
-  "environment": "production",
-  "version": "1.0.0",
-  "services": {
-    "database": "healthy",
-    "cache": "healthy",
-    "queue": "healthy"
-  }
+  "timestamp": "30/Jul/2025:10:00:00 +0000",
+  "environment": "prod"
 }
-'''
+```
 
-#### Possíveis Status Codes
-
-| Código | Descrição |
-|--------|-----------|
-| 200 | API funcionando normalmente |
-| 503 | Serviços indisponíveis |
+> ⚠️ **Este endpoint sempre responde `healthy`.** É uma integração MOCK do API
+> Gateway, que devolve um valor fixo sem verificar DynamoDB, SQS ou Redis. Ele
+> confirma apenas que o API Gateway está no ar.
+>
+> **Não use como sonda de dependências.** Um health check que nunca falha engana
+> o monitoramento e o operador de plantão. Ver
+> [docs/06-observabilidade.md](docs/06-observabilidade.md).
 
 ---
 
-# ############################################################################################################
-### 2. Criar Lançamento
-# ############################################################################################################
-Registra um novo lançamento (débito ou crédito) no sistema.
+## 2. Criar lançamento
 
-#### Request
-
-'''http
+```http
 POST /lancamentos
 Content-Type: application/json
+```
 
+```json
 {
   "tipo": "CREDITO",
-  "valor": 1500.50,
+  "valor": "1500.50",
   "descricao": "Pagamento recebido do cliente",
   "categoria": "VENDAS",
   "data": "2025-07-30T14:30:00Z",
-  "tags": ["cliente-vip", "pagamento-antecipado"],
-  "metadata": {
-    "cliente_id": "12345",
-    "pedido_id": "PED-001"
-  }
+  "tags": ["cliente-vip", "pagamento-antecipado"]
 }
-'''
+```
 
-#### Parâmetros do Body
+### Campos
 
-| Campo | Tipo | Obrigatório | Descrição |
-|-------|------|-------------|-----------|
-| `tipo` | string | ✅ | Tipo do lançamento: `CREDITO` ou `DEBITO` |
-| `valor` | number | ✅ | Valor do lançamento (positivo, até 2 casas decimais) |
-| `descricao` | string | ✅ | Descrição do lançamento (1-255 caracteres) |
-| `categoria` | string | ❌ | Categoria do lançamento (padrão: "GERAL") |
-| `data` | string | ❌ | Data/hora ISO 8601 (padrão: agora) |
-| `tags` | array | ❌ | Lista de tags para classificação |
-| `metadata` | object | ❌ | Dados adicionais em formato chave-valor |
+| Campo | Tipo | Obrigatório | Regras |
+|---|---|:---:|---|
+| `tipo` | string | ✅ | `CREDITO` ou `DEBITO`, exatamente assim |
+| `valor` | string ou número | ✅ | **Maior que zero.** O sinal do movimento vem do `tipo`, nunca do valor |
+| `descricao` | string | ✅ | 1 a 255 caracteres; espaços nas pontas são removidos |
+| `categoria` | string | ❌ | Padrão `GERAL` |
+| `data` | string | ❌ | ISO 8601. Padrão: instante atual em **UTC** |
+| `tags` | array | ❌ | Padrão `[]` |
 
-#### Response Success
+> **Envie `valor` como string.** Um número JSON é lido como ponto flutuante pelo
+> desserializador e já chega com a precisão comprometida. `"1500.50"` preserva o
+> valor exato; `1500.50` não garante isso.
 
-**Status Code**: `201 Created`
+> ⚠️ O campo `metadata` **não é suportado**. Se enviado, é ignorado
+> silenciosamente.
 
-'''json
+> ⚠️ **`data` é interpretada em UTC.** Uma venda às 22h no horário de Brasília é
+> gravada como o dia seguinte e entra no saldo do dia errado. Correção prevista:
+> campo `data_movimento` no fuso do comerciante. Ver
+> [docs/02-requisitos-e-nfrs.md](docs/02-requisitos-e-nfrs.md#3-rastreabilidade-das-lacunas).
+
+### 201 Created
+
+```json
 {
   "success": true,
   "message": "Lançamento criado com sucesso",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "tipo": "CREDITO",
-    "valor": 1500.50,
+    "valor": 1500.5,
     "descricao": "Pagamento recebido do cliente",
-    "categoria": "VENDAS",
     "data": "2025-07-30T14:30:00Z",
-    "tags": ["cliente-vip", "pagamento-antecipado"],
-    "metadata": {
-      "cliente_id": "12345",
-      "pedido_id": "PED-001"
-    },
-    "data_criacao": "2025-07-30T14:30:01Z",
-    "status": "ATIVO"
+    "categoria": "VENDAS",
+    "tags": ["cliente-vip", "pagamento-antecipado"]
   },
-  "timestamp": "2025-07-30T14:30:01Z"
+  "timestamp": "2025-07-30T14:30:01.123456+00:00"
 }
-'''
+```
 
-#### Response Error
+> ⚠️ **`valor` retorna como número de ponto flutuante**, o que pode perder
+> precisão. O valor gravado no banco é exato (`Decimal`); a perda ocorre apenas na
+> serialização da resposta. Correção prevista: retornar como string.
 
-**Status Code**: `400 Bad Request`
+### 400 Bad Request
 
-'''json
+```json
 {
-  "success": false,
-  "error": "VALIDATION_ERROR",
-  "message": "Dados inválidos fornecidos",
-  "details": [
-    {
-      "field": "valor",
-      "message": "Valor deve ser maior que zero",
-      "code": "INVALID_VALUE"
-    },
-    {
-      "field": "tipo",
-      "message": "Tipo deve ser 'CREDITO' ou 'DEBITO'",
-      "code": "INVALID_ENUM"
-    }
-  ],
-  "timestamp": "2025-07-30T14:30:01Z"
+  "error": "Dados inválidos",
+  "message": "Tipo deve ser 'DEBITO' ou 'CREDITO'"
 }
-'''
+```
 
-#### Possíveis Status Codes
+Mensagens possíveis:
 
-| Código | Descrição |
-|--------|-----------|
-| 201 | Lançamento criado com sucesso |
-| 400 | Dados inválidos |
-| 422 | Erro de validação de negócio |
-| 500 | Erro interno do servidor |
+| Situação | `message` |
+|---|---|
+| Campo faltando | `Campo 'tipo' é obrigatório` |
+| Tipo fora do domínio | `Tipo deve ser 'DEBITO' ou 'CREDITO'` |
+| Valor ≤ 0 | `Valor deve ser maior que zero` |
+| Valor não numérico | `Valor deve ser um número válido` |
+| Descrição fora do limite | `Descrição deve ter entre 1 e 255 caracteres` |
+| Data mal formatada | `Data deve estar no formato ISO 8601` |
+| Body não é JSON | `Body da requisição deve ser um JSON válido` |
+
+### Consistência eventual
+
+O lançamento é gravado de forma síncrona e durável antes da resposta. **A
+atualização do saldo consolidado é assíncrona**, com janela alvo de p95 abaixo de
+30 segundos.
+
+Consultar `/consolidado` imediatamente após um `POST` pode devolver a posição
+anterior. Use o campo `ultima_atualizacao` da resposta para saber a idade do dado.
+Ver [ADR-005](docs/adr/0005-consistencia-eventual.md).
+
+### ⚠️ Sem idempotência
+
+**Uma retentativa cria um segundo lançamento.** Não há deduplicação: se a resposta
+se perder por timeout de rede e o cliente repetir a chamada, o valor é
+contabilizado duas vezes.
+
+Até que `Idempotency-Key` seja implementado, o consumidor precisa controlar isso
+na origem — o que também vale como critério de integração
+([docs/07-seguranca.md §5.1](docs/07-seguranca.md#51-requisitos-obrigatórios-do-consumidor)).
 
 ---
 
-# ############################################################################################################
-### 3. Listar Lançamentos
-# ############################################################################################################
-Recupera uma lista de lançamentos com filtros opcionais.
+## 3. Listar lançamentos
 
-#### Request
+```http
+GET /lancamentos?data_inicio=2025-07-01&data_fim=2025-07-31&tipo=CREDITO&limit=50
+```
 
-'''http
-GET /lancamentos?data_inicio=2025-07-01&data_fim=2025-07-31&tipo=CREDITO&categoria=VENDAS&limit=50&offset=0
-'''
+### Parâmetros
 
-#### Query Parameters
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `data_inicio` | string | — | `YYYY-MM-DD` |
+| `data_fim` | string | — | `YYYY-MM-DD` |
+| `tipo` | string | — | `CREDITO` ou `DEBITO` |
+| `categoria` | string | — | Correspondência exata |
+| `tags` | string | — | Lista separada por vírgula |
+| `limit` | inteiro | `50` | Entre 1 e 100 |
+| `offset` | inteiro | `0` | Deslocamento |
+| `sort` | string | `data_desc` | `data_desc`, `data_asc`, `valor_desc`, `valor_asc` |
 
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| `data_inicio` | string | ❌ | Data início (YYYY-MM-DD) |
-| `data_fim` | string | ❌ | Data fim (YYYY-MM-DD) |
-| `tipo` | string | ❌ | Filtrar por tipo: `CREDITO` ou `DEBITO` |
-| `categoria` | string | ❌ | Filtrar por categoria |
-| `tags` | string | ❌ | Filtrar por tags (separadas por vírgula) |
-| `limit` | integer | ❌ | Limite de resultados (padrão: 50, máx: 100) |
-| `offset` | integer | ❌ | Offset para paginação (padrão: 0) |
-| `sort` | string | ❌ | Ordenação: `data_asc`, `data_desc`, `valor_asc`, `valor_desc` |
+### 200 OK
 
-#### Response
-
-**Status Code**: `200 OK`
-
-'''json
+```json
 {
   "success": true,
   "data": {
@@ -204,471 +282,256 @@ GET /lancamentos?data_inicio=2025-07-01&data_fim=2025-07-31&tipo=CREDITO&categor
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "tipo": "CREDITO",
-        "valor": 1500.50,
+        "valor": 1500.5,
         "descricao": "Pagamento recebido do cliente",
-        "categoria": "VENDAS",
         "data": "2025-07-30T14:30:00Z",
+        "categoria": "VENDAS",
         "tags": ["cliente-vip"],
-        "data_criacao": "2025-07-30T14:30:01Z"
+        "status": "ATIVO",
+        "data_criacao": "2025-07-30T14:30:01.123456+00:00",
+        "data_atualizacao": "2025-07-30T14:30:01.123456+00:00"
       }
     ],
     "pagination": {
-      "total": 150,
+      "total": 1,
       "limit": 50,
       "offset": 0,
-      "has_more": true
+      "has_more": false
     },
     "summary": {
-      "total_creditos": 15000.00,
-      "total_debitos": 8500.00,
-      "saldo_liquido": 6500.00,
-      "quantidade_total": 150
+      "total_creditos": 1500.5,
+      "total_debitos": 0.0,
+      "saldo_liquido": 1500.5,
+      "quantidade_total": 1
     }
   },
-  "timestamp": "2025-07-30T14:30:01Z"
+  "timestamp": "2025-07-30T15:00:00.000000+00:00"
 }
-'''
+```
+
+Somente lançamentos com `status: ATIVO` são retornados. Cancelamento é feito por
+mudança de status, preservando a trilha de auditoria.
+
+> ⚠️ **Desempenho.** Este endpoint executa uma varredura completa da tabela. O
+> custo cresce com o volume total, não com o tamanho do resultado. Correção
+> prevista em [ADR-002](docs/adr/0002-dynamodb-vs-relacional.md).
 
 ---
 
-# ############################################################################################################
-### 4. Obter Lançamento por ID
-# ############################################################################################################
-Recupera um lançamento específico pelo seu ID.
+## 4. Obter lançamento por ID
 
-#### Request
+```http
+GET /lancamentos/550e8400-e29b-41d4-a716-446655440000
+```
 
-'''http
-GET /lancamentos/{id}
-'''
+**200 OK** — objeto do lançamento em `data`.
 
-#### Path Parameters
-
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `id` | string | UUID do lançamento |
-
-#### Response
-
-**Status Code**: `200 OK`
-
-'''json
-{
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "tipo": "CREDITO",
-    "valor": 1500.50,
-    "descricao": "Pagamento recebido do cliente",
-    "categoria": "VENDAS",
-    "data": "2025-07-30T14:30:00Z",
-    "tags": ["cliente-vip", "pagamento-antecipado"],
-    "metadata": {
-      "cliente_id": "12345",
-      "pedido_id": "PED-001"
-    },
-    "data_criacao": "2025-07-30T14:30:01Z",
-    "data_atualizacao": "2025-07-30T14:30:01Z",
-    "status": "ATIVO"
-  },
-  "timestamp": "2025-07-30T14:30:01Z"
-}
-'''
-
-#### Error Response
-
-**Status Code**: `404 Not Found`
-
-'''json
-{
-  "success": false,
-  "error": "NOT_FOUND",
-  "message": "Lançamento não encontrado",
-  "timestamp": "2025-07-30T14:30:01Z"
-}
-'''
+| Código | Situação |
+|---|---|
+| 400 | ID não está no formato UUID |
+| 404 | Lançamento inexistente |
 
 ---
 
-# ############################################################################################################
-### 5. Consultar Saldo Diário
-# ############################################################################################################
-Obtém o saldo consolidado para uma data específica.
+## 5. Consultar saldo diário
 
-#### Request
-
-'''http
+```http
 GET /consolidado?data=2025-07-30
-'''
+```
 
-#### Query Parameters
+### Parâmetros
 
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| `data` | string | ❌ | Data no formato YYYY-MM-DD (padrão: hoje) |
-| `incluir_detalhes` | boolean | ❌ | Incluir detalhes dos lançamentos (padrão: false) |
-| `refresh_cache` | boolean | ❌ | Forçar recálculo ignorando cache (padrão: false) |
+| Parâmetro | Descrição |
+|---|---|
+| `data` | Data específica, `YYYY-MM-DD` |
+| `data_inicio` + `data_fim` | Período; muda a resposta para `relatorio_periodo` |
+| `incluir_detalhes` | `true` inclui o detalhamento diário (só com período) |
+| `salvar_s3` | `true` arquiva o relatório no S3 |
 
-#### Response
+Sem nenhum parâmetro, retorna o dia corrente com `"tipo": "saldo_atual"`.
 
-**Status Code**: `200 OK`
+### 200 OK
 
-'''json
+```json
 {
   "success": true,
   "tipo": "saldo_diario",
   "data": {
     "data": "2025-07-30",
-    "saldo_inicial": 10000.00,
-    "movimentacao": {
-      "total_creditos": 5500.00,
-      "total_debitos": 2300.00,
-      "saldo_liquido": 3200.00
-    },
-    "saldo_final": 13200.00,
-    "estatisticas": {
-      "quantidade_lancamentos": 12,
-      "quantidade_creditos": 8,
-      "quantidade_debitos": 4,
-      "ticket_medio_credito": 687.50,
-      "ticket_medio_debito": 575.00
-    },
-    "categorias": {
-      "VENDAS": {
-        "creditos": 4500.00,
-        "debitos": 0.00,
-        "saldo": 4500.00
-      },
-      "DESPESAS": {
-        "creditos": 0.00,
-        "debitos": 1800.00,
-        "saldo": -1800.00
-      }
-    },
-    "ultima_atualizacao": "2025-07-30T15:30:00Z",
-    "fonte_dados": "cache"
+    "saldo_inicial": 5000.0,
+    "total_creditos": 1500.5,
+    "total_debitos": 300.25,
+    "saldo_final": 6200.25,
+    "quantidade_lancamentos": 12,
+    "ultima_atualizacao": "2025-07-30T18:45:00.000000+00:00"
   },
-  "timestamp": "2025-07-30T15:30:01Z"
+  "timestamp": "2025-07-30T18:50:00.000000+00:00"
 }
-'''
+```
 
-#### Com Detalhes
+| Campo | Significado |
+|---|---|
+| `saldo_inicial` | Saldo final do dia anterior |
+| `saldo_final` | `saldo_inicial + total_creditos − total_debitos` |
+| `ultima_atualizacao` | **Quando o saldo foi apurado.** Use para avaliar a idade do dado |
 
-'''http
-GET /consolidado?data=2025-07-30&incluir_detalhes=true
-'''
+Uma data sem movimento retorna **200 com valores zerados**, não 404: "não houve
+movimento" é resposta de negócio válida e diferente de "a data não existe".
 
-'''json
-{
-  "success": true,
-  "tipo": "saldo_diario",
-  "data": {
-    "data": "2025-07-30",
-    "saldo_inicial": 10000.00,
-    "saldo_final": 13200.00,
-    "movimentacao": {
-      "total_creditos": 5500.00,
-      "total_debitos": 2300.00,
-      "saldo_liquido": 3200.00
-    },
-    "lancamentos": [
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "tipo": "CREDITO",
-        "valor": 1500.50,
-        "descricao": "Pagamento cliente",
-        "categoria": "VENDAS",
-        "data": "2025-07-30T09:30:00Z"
-      }
-    ]
-  }
-}
-'''
+Saldo negativo é estado legítimo — o comerciante pode gastar mais do que recebeu
+no dia.
 
 ---
 
-# ############################################################################################################
-### 6. Relatório por Período
-# ############################################################################################################
-Gera relatório consolidado para um período de datas.
+## 6. Relatório por período
 
-#### Request
+```http
+GET /consolidado/relatorio?data_inicio=2025-07-01&data_fim=2025-07-31&incluir_detalhes=true
+```
 
-'''http
-GET /consolidado/relatorio?data_inicio=2025-07-01&data_fim=2027-07-31&formato=json&salvar_s3=true
-'''
+`data_inicio` e `data_fim` são **obrigatórios**.
 
-#### Query Parameters
+### 200 OK
 
-| Parâmetro           | Tipo    | Obrigatório | Descrição |
-|---------------------|---------|-------------|-----------|
-| `data_inicio`       | string  |      ✅    | Data início (YYYY-MM-DD) |
-| `data_fim`          | string  |      ✅    | Data fim (YYYY-MM-DD) |
-| `formato`           | string  |      ❌    | Formato: `json`, `csv`, `pdf` (padrão: json) |
-| `incluir_detalhes`  | boolean |      ❌    | Incluir saldos diários detalhados |
-| `agrupar_por`       | string  |      ❌    | Agrupar por: `dia`, `semana`, `mes` |
-| `salvar_s3`         | boolean |      ❌    | Salvar cópia no S3 para backup |
-| `email_relatorio`   | string  |      ❌    | Enviar por email (formato PDF) |
-
-#### Response
-
-**Status Code**: `200 OK`
-
-'''json
+```json
 {
   "success": true,
   "tipo": "relatorio_periodo",
   "data": {
     "periodo": {
       "inicio": "2025-07-01",
-      "fim": "2024-07-31",
-      "dias_uteis": 22,
+      "fim": "2025-07-31",
       "quantidade_dias": 31
     },
     "resumo_financeiro": {
-      "saldo_inicial_periodo": 5000.00,
-      "saldo_final_periodo": 25000.00,
-      "total_creditos_periodo": 45000.00,
-      "total_debitos_periodo": 25000.00,
-      "variacao_liquida": 20000.00,
-      "percentual_crescimento": 400.0
-    },
-    "estatisticas": {
-      "dias_com_movimentacao": 28,
-      "media_creditos_dia": 1607.14,
-      "media_debitos_dia": 892.86,
-      "maior_saldo_diario": 25000.00,
-      "menor_saldo_diario": 5000.00,
-      "dia_maior_movimentacao": "2025-07-25"
-    },
-    "categorias_periodo": {
-      "VENDAS": {
-        "total_creditos": 35000.00,
-        "total_debitos": 0.00,
-        "participacao_creditos": 77.8
-      },
-      "DESPESAS": {
-        "total_creditos": 0.00,
-        "total_debitos": 15000.00,
-        "participacao_debitos": 60.0
-      }
-    },
-    "tendencias": {
-      "crescimento_medio_diario": 645.16,
-      "volatilidade": "BAIXA",
-      "sazonalidade": {
-        "melhor_dia_semana": "quinta-feira",
-        "pior_dia_semana": "domingo"
-      }
-    },
-    "saldos_diarios": [
-      {
-        "data": "2025-07-01",
-        "saldo_inicial": 5000.00,
-        "total_creditos": 1200.00,
-        "total_debitos": 300.00,
-        "saldo_final": 5900.00,
-        "quantidade_lancamentos": 5
-      }
-    ]
+      "saldo_inicial_periodo": 5000.0,
+      "saldo_final_periodo": 18750.3,
+      "total_creditos_periodo": 45200.8,
+      "total_debitos_periodo": 31450.5,
+      "variacao_liquida": 13750.3,
+      "percentual_crescimento": 275.01
+    }
   },
   "metadados": {
-    "gerado_em": "2025-07-01T10:00:00Z",
-    "tempo_processamento_ms": 1250,
-    "fonte_dados": "database",
-    "versao_relatorio": "1.0"
+    "gerado_em": "2025-08-01T09:00:00.000000+00:00",
+    "formato": "json",
+    "incluir_detalhes": true
   },
-  "arquivos": {
-    "s3_backup": {
-      "bucket": "relatorios-fluxo-caixa",
-      "key": "2025/07/relatorio_2025-07-01_2025-07-31_20240201100000.json",
-      "url_presigned": "https://s3.amazonaws.com/..."
-    }
-  }
+  "timestamp": "2025-08-01T09:00:00.000000+00:00"
 }
-'''
+```
+
+Com `incluir_detalhes=true`, `data.saldos_diarios` traz um objeto por dia.
+Com `salvar_s3=true`, a resposta ganha `arquivos.s3_backup` com bucket e chave.
+
+| Código | Situação |
+|---|---|
+| 400 | Parâmetro obrigatório ausente, data inválida, ou `data_inicio > data_fim` |
+
+> ⚠️ **Períodos longos são caros.** Dias ainda não consolidados são calculados sob
+> demanda, cada um disparando uma varredura de tabela. Um período de 12 meses pode
+> exceder o timeout de 60 s da função.
 
 ---
 
-# ############################################################################################################
-### 7. Métricas Resumidas
-# ############################################################################################################
-Obtém métricas consolidadas do sistema.
+## 7. Métricas agregadas
 
-#### Request
-
-'''http
+```http
 GET /metricas?periodo=30d&incluir_tendencias=true
-'''
+```
 
-#### Query Parameters
+| Parâmetro | Valores | Padrão |
+|---|---|---|
+| `periodo` | `7d`, `30d`, `90d`, `1y` | `30d` |
+| `incluir_tendencias` | `true`, `false` | `false` |
 
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `periodo` | string | Período: `7d`, `30d`, `90d`, `1y` |
-| `incluir_tendencias` | boolean | Incluir análise de tendências |
+### 200 OK
 
-#### Response
-
-'''json
+```json
 {
   "success": true,
   "data": {
     "periodo_analise": "30d",
+    "periodo_datas": { "inicio": "2025-07-01", "fim": "2025-07-30", "dias_total": 30 },
     "resumo": {
-      "total_lancamentos": 1250,
-      "total_creditos": 125000.00,
-      "total_debitos": 75000.00,
-      "saldo_liquido": 50000.00,
-      "crescimento_percentual": 15.5
+      "total_lancamentos": 342,
+      "total_creditos": 45200.8,
+      "total_debitos": 31450.5,
+      "saldo_liquido": 13750.3
     },
     "performance": {
-      "media_lancamentos_dia": 41.7,
-      "maior_volume_dia": 8500.00,
-      "menor_volume_dia": 0.00,
-      "dias_sem_movimentacao": 2
+      "dias_com_movimentacao": 28,
+      "dias_sem_movimentacao": 2,
+      "media_lancamentos_dia": 11.4,
+      "maior_volume_dia": 4520.0,
+      "menor_volume_dia": 120.5
     },
     "tendencias": {
       "direcao": "CRESCIMENTO",
       "intensidade": "MODERADA",
-      "previsao_proximo_mes": 57500.00,
-      "confianca_previsao": 0.85
+      "crescimento_medio_diario": 45.32
     }
-  }
+  },
+  "timestamp": "2025-07-30T20:00:00.000000+00:00"
 }
-'''
+```
+
+`periodo` fora da lista retorna 400.
 
 ---
 
-# ############################################################################################################
-## 📝 Códigos de Status HTTP
-# ############################################################################################################
-### Success Codes
+## Códigos de status
 
-| Código | Nome | Descrição |
-|--------|------|-----------|
-| 200 | OK | Requisição processada com sucesso |
-| 201 | Created | Recurso criado com sucesso |
-| 202 | Accepted | Requisição aceita para processamento assíncrono |
+| Código | Quando |
+|---|---|
+| `200` | Consulta bem-sucedida |
+| `201` | Lançamento criado |
+| `400` | Payload ou parâmetro inválido |
+| `404` | Recurso inexistente |
+| `405` | Método não suportado para o recurso |
+| `429` | Limite de requisições excedido |
+| `500` | Erro interno |
 
-### Client Error Codes
+| `401` | Token ausente, malformado, expirado ou com assinatura inválida |
+| `403` | Token válido, mas sem o escopo exigido pelo recurso |
 
-| Código | Nome | Descrição |
-|--------|------|-----------|
-| 400 | Bad Request | Dados inválidos na requisição |
-| 401 | Unauthorized | Autenticação necessária |
-| 403 | Forbidden | Acesso negado |
-| 404 | Not Found | Recurso não encontrado |
-| 422 | Unprocessable Entity | Erro de validação de negócio |
-| 429 | Too Many Requests | Rate limit excedido |
+### Formato de erro
 
-### Server Error Codes
-
-| Código | Nome | Descrição |
-|--------|------|-----------|
-| 500 | Internal Server Error | Erro interno do servidor |
-| 502 | Bad Gateway | Erro no gateway |
-| 503 | Service Unavailable | Serviço temporariamente indisponível |
-| 504 | Gateway Timeout | Timeout no gateway |
-
----
-
-# ############################################################################################################
-## 🔒 Autenticação e Segurança
-# ############################################################################################################
-### API Key Authentication
-
-'''http
-X-API-Key: sua-api-key-aqui
-'''
-
-### Rate Limiting
-
-- **Limite Global**: 1000 req/s por IP
-- **Limite por Endpoint**:
-  - `POST /lancamentos`: 100 req/s
-  - `GET /consolidado`: 200 req/s
-  - `GET /consolidado/relatorio`: 10 req/s
-
-### Headers de Rate Limit
-
-'''http
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 999
-X-RateLimit-Reset: 1642248000
-'''
-
-### CORS
-
-'''http
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
-Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key
-'''
-
----
-
-# ############################################################################################################
-## 🚨 Tratamento de Erros
-# ############################################################################################################
-### Estrutura Padrão de Erro
-
-'''json
+```json
 {
-  "success": false,
-  "error": "ERROR_CODE",
-  "message": "Descrição legível do erro",
-  "details": [
-    {
-      "field": "campo_com_erro",
-      "message": "Descrição específica",
-      "code": "VALIDATION_CODE"
-    }
-  ],
-  "timestamp": "2025-07-30T14:30:01Z",
-  "request_id": "550e8400-e29b-41d4-a716-446655440000"
+  "error": "Dados inválidos",
+  "message": "Tipo deve ser 'DEBITO' ou 'CREDITO'"
 }
-'''
+```
 
-### Códigos de Erro Comuns
-
-| Código | Descrição |
-|--------|-----------|
-| `VALIDATION_ERROR` | Erro de validação de dados |
-| `BUSINESS_RULE_ERROR` | Violação de regra de negócio |
-| `RESOURCE_NOT_FOUND` | Recurso não encontrado |
-| `DUPLICATE_RESOURCE` | Tentativa de criar recurso duplicado |
-| `RATE_LIMIT_EXCEEDED` | Limite de taxa excedido |
-| `SERVICE_UNAVAILABLE` | Serviço temporariamente indisponível |
-| `INTERNAL_ERROR` | Erro interno do sistema |
+`error` é a categoria; `message` é a descrição acionável. Erros internos (500)
+devolvem mensagem genérica de propósito, para não vazar detalhe de implementação.
 
 ---
 
-# ############################################################################################################
-## 📊 Monitoramento e Observabilidade
-# ############################################################################################################
-### Health Check Endpoints
+## Recomendações de integração
 
-'''http
-GET /health                    # Status geral
-GET /health/detailed          # Status detalhado de componentes
-GET /health/database          # Status do banco de dados
-GET /health/cache             # Status do cache
-'''
+| # | Recomendação | Por quê |
+|---|---|---|
+| 1 | Enviar `valor` como string | Preserva precisão monetária |
+| 2 | Controlar duplicidade na origem | A API ainda não é idempotente |
+| 3 | Recuo exponencial com *jitter* na retentativa | Evita tempestade de retentativas |
+| 4 | Tratar 429 respeitando `Retry-After` | Throttling por serviço no gateway |
+| 5 | Não assumir leitura imediata após escrita | Consistência eventual, p95 < 30 s |
+| 6 | Ler `ultima_atualizacao` antes de confiar no saldo | Informa a idade do dado |
+| 7 | Manter volume abaixo de ~66 req/s por identidade | Limite do WAF |
 
-### Métricas Disponíveis
+Critérios completos em
+[docs/07-seguranca.md §5](docs/07-seguranca.md#5-critérios-de-segurança-para-integração-de-serviços).
 
-- **Performance**: Latência, throughput, taxa de erro
-- **Negócio**: Volume de transações, saldos, categorias
-- **Infraestrutura**: CPU, memória, conexões DB
+---
 
-### Logging
+## Documentos relacionados
 
-Todos os requests são logados com:
-- Request ID único
-- Timestamp
-- IP do cliente
-- Método e endpoint
-- Status code
-- Tempo de resposta
-- User agent
+| Documento | Conteúdo |
+|---|---|
+| [README](README.md) | Visão geral e execução local |
+| [docs/03-arquitetura-alvo.md](docs/03-arquitetura-alvo.md) | Diagramas C4 e fluxos |
+| [docs/07-seguranca.md](docs/07-seguranca.md) | Autenticação e critérios de integração |
+| [docs/06-observabilidade.md](docs/06-observabilidade.md) | Métricas, alarmes e runbooks |
+| [openapi_spec.txt](openapi_spec.txt) | Especificação OpenAPI |

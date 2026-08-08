@@ -7,6 +7,7 @@ from decimal import Decimal
 from configuration import Config
 from dataclasses import dataclass, asdict
 from redis_ops import get_from_cache, set_cache, invalidate_cache
+from excecoes import PersistenciaError, ConsolidadoError
 
 patch_all()
 config = Config()
@@ -54,9 +55,9 @@ def get_lancamentos_by_date_range(data_inicio: str, data_fim: str) -> List[Dict[
 
         return response['Items']
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao recuperar lançamentos: {str(e)}")
-        raise "Erro ao acessar dados de lançamentos"
+        raise PersistenciaError("Erro ao acessar dados de lançamentos") from e
 
 
 @xray_recorder.capture('calculate_saldo_diario')
@@ -124,9 +125,9 @@ def save_saldo_diario(saldo: SaldoDiario) -> None:
         config.tableConsolidado.put_item(Item=item)
         config.logger.info(f"Saldo diário salvo: {saldo.data}")
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao salvar saldo diário: {str(e)}")
-        raise "Erro ao salvar consolidado"
+        raise PersistenciaError("Erro ao salvar consolidado") from e
 
 
 @xray_recorder.capture('get_saldo_diario')
@@ -187,7 +188,7 @@ def get_saldo_diario(data: str, use_cache: bool = True) -> Optional[SaldoDiario]
 
             return saldo
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao recuperar saldo diário: {str(e)}")
 
     return None
@@ -206,7 +207,7 @@ def get_saldo_anterior(data: str) -> Decimal:
         if saldo_anterior:
             return saldo_anterior.saldo_final
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.warning(f"Erro ao recuperar saldo anterior: {str(e)}")
 
     return Decimal('0')
@@ -321,9 +322,9 @@ def generate_relatorio_periodo(data_inicio: str, data_fim: str) -> RelatorioCons
 
         return relatorio
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao gerar relatório: {str(e)}")
-        raise "Erro ao gerar relatório consolidado"
+        raise ConsolidadoError("Erro ao gerar relatório consolidado") from e
 
 
 @xray_recorder.capture('save_relatorio_to_s3')
@@ -378,9 +379,9 @@ def save_relatorio_to_s3(relatorio: RelatorioConsolidado) -> str:
         config.logger.info(f"Relatório salvo no S3: {filename}")
         return filename
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao salvar relatório no S3: {str(e)}")
-        raise "Erro ao salvar relatório"
+        raise PersistenciaError("Erro ao salvar relatório") from e
 
 
 @xray_recorder.capture('recalculate_subsequent_balances')
@@ -406,7 +407,7 @@ def recalculate_subsequent_balances(data_inicio: str, max_days: int = 30) -> Non
             # Invalidar cache
             invalidate_cache(f"saldo_diario:{data_atual}:*")
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.warning(f"Erro ao recalcular saldos subsequentes: {str(e)}")
 
 
@@ -420,7 +421,7 @@ def has_lancamentos_for_date(data: str) -> bool:
     try:
         lancamentos = get_lancamentos_by_date_range(data_inicio, data_fim)
         return len(lancamentos) > 0
-    except BaseException:
+    except Exception:
         return False
 
 

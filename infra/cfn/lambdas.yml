@@ -27,12 +27,37 @@ Parameters:
     Type: String
   DatabaseSecret:
     Type: String
+  JwtSecret:
+    Type: String
+    Description: ARN do segredo de assinatura dos tokens JWT
   RedisEndpoint:
     Type: String
   RedisPort:
     Type: String
   LambdaSecurityGroup:
     Type: String
+
+  RetencaoLogsEmDias:
+    Type: Number
+    Default: 30
+    Description: >-
+      Retencao dos log groups. Sem isso os logs sao retidos para sempre e o
+      custo cresce indefinidamente.
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365]
+
+  ConcorrenciaReservadaLancamentos:
+    Type: Number
+    Default: 100
+    Description: >-
+      Piso de concorrencia garantido ao servico de lancamentos. Sustenta o
+      requisito de que ele nao fique indisponivel se o consolidado cair.
+
+  ConcorrenciaMaximaConsolidado:
+    Type: Number
+    Default: 50
+    Description: >-
+      Teto de concorrencia do consumidor da fila. Impede que um acumulo de
+      mensagens drene a cota da conta e deixe os lancamentos sem execucao.
 
   S3BucketLambdas:
     Type: String
@@ -62,6 +87,11 @@ Parameters:
   S3RedisLayerKey:
     Type: String
     Default: infra/lambdas/redis.zip
+
+  S3KeyLambdaAuthorizer:
+    Description: The name of the ZIP package
+    Type: String
+    Default: infra/lambdas/authorizer.zip
 
 Resources:
   XRayLayer:
@@ -100,10 +130,24 @@ Resources:
           Ref: S3RedisLayerKey        
 
 
-  LambdaExecutionRole:
+  # ===========================================================================
+  # IAM — uma role por função (menor privilégio)
+  # ===========================================================================
+  # Antes existia uma role única compartilhada pelas duas Lambdas, o que fazia
+  # cada uma herdar as permissões da outra: lançamentos podia varrer a tabela de
+  # consolidado, consolidado podia publicar na fila. O raio de explosão de um
+  # comprometimento dobrava sem necessidade.
+  #
+  # Também foram removidas `ec2:CreateSecurityGroup` e `ec2:DeleteSecurityGroup`
+  # em `Resource: '*'`. Nenhuma função de negócio precisa apagar security groups,
+  # e a permissão criava caminho de escalada: comprometeu a função, derruba a
+  # rede. As permissões de ENI necessárias para Lambda em VPC já vêm da managed
+  # policy AWSLambdaVPCAccessExecutionRole, que continua anexada.
+
+  LancamentosRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-lambda-role'
+      RoleName: !Sub '${ProjectName}-${Environment}-lancamentos-role'
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -114,116 +158,148 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
         - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
       Policies:
-        - PolicyName: DefaultPermissions
+        - PolicyName: LancamentosPermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Sid: WriteLogs
+              # Escreve e lê apenas a própria tabela. Sem acesso ao consolidado.
+              - Sid: TabelaLancamentos
                 Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:GetLogEvents
-                  - logs:PutLogEvents
-                Resource:
-                  Fn::Join:
-                    - ''
-                    - - 'arn:aws:logs:'
-                      - Ref: AWS::Region
-                      - ':'
-                      - Ref: AWS::AccountId
-                      - ':*'
-              - Sid: GeneralPermissions
-                Effect: Allow
-                Action:
-                  - ec2:CreateNetworkInterface
-                  - ec2:CreateSecurityGroup
-                  - ec2:DeleteNetworkInterface
-                  - ec2:DeleteSecurityGroup
-                  - ec2:DescribeAvailabilityZones
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DescribeSecurityGroups
-                  - ec2:DescribeSubnets
-                  - ec2:DescribeVpcs
-                  - ecs:ModifyNetworkInterfaceAttribute
-                Resource: '*'
-        - PolicyName: DynamoDBAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
                   - dynamodb:Query
                   - dynamodb:Scan
                 Resource:
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBLancamentos}"
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBLancamentos}/index/*"
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBConsolidado}"
-        - PolicyName: SQSAccess
+              # Só publica na fila; não consome.
+              - Sid: PublicaNaFila
+                Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !Ref ConsolidacaoQueueArn
+              - Sid: PublicaEventos
+                Effect: Allow
+                Action: events:PutEvents
+                Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
+              - Sid: Criptografia
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !Ref KMSKeyArn
+
+  ConsolidadoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-consolidado-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: ConsolidadoPermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
+              - Sid: TabelaConsolidado
+                Effect: Allow
                 Action:
-                  - sqs:SendMessage
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                Resource:
+                  !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBConsolidado}"
+              # Leitura da tabela de lançamentos: acoplamento de dados entre
+              # bounded contexts que o ADR-004 prevê remover. Enquanto o
+              # recálculo por varredura existir, a permissão é necessária —
+              # e fica restrita a leitura.
+              - Sid: LeituraLancamentosTemporaria
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBLancamentos}"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBLancamentos}/index/*"
+              # Só consome a fila; não publica.
+              - Sid: ConsomeFila
+                Effect: Allow
+                Action:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                 Resource:
                   - !Ref ConsolidacaoQueueArn
                   - !Ref ConsolidacaoQueueDlqArn
-        - PolicyName: S3Access
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
+              - Sid: ArquivaRelatorios
+                Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                  - s3:DeleteObject
-                Resource: 
-                  - !Sub 'arn:aws:s3:::${S3Bucket}'
-                  - !Sub 'arn:aws:s3:::${S3Bucket}/*'                  
-        - PolicyName: KMSAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
+                Resource: !Sub 'arn:aws:s3:::${S3Bucket}/*'
+              - Sid: Criptografia
+                Effect: Allow
                 Action:
                   - kms:Decrypt
                   - kms:GenerateDataKey
                 Resource: !Ref KMSKeyArn
-        - PolicyName: SecretsManagerAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
+              - Sid: LeSegredo
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
                 Resource: !Ref DatabaseSecret
-        - PolicyName: EventBridgeAccess
+
+  AuthorizerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-authorizer-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        # O authorizer é a função de maior valor para um atacante e a que menos
+        # precisa: só lê o segredo de assinatura. Nada de banco, fila ou rede.
+        - PolicyName: AuthorizerPermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
-                Action:
-                  - events:PutEvents
-                Resource: '*'
-  
-  
+              - Sid: LeSegredoJwt
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref JwtSecret
+              - Sid: Criptografia
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref KMSKeyArn
+
+
   LambdaLancamentos:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: 'lancamentos'
       Runtime: python3.10
       Handler: main.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Role: !GetAtt LancamentosRole.Arn
       Timeout: 30
       MemorySize: 256
+      # Piso de concorrência garantido: mesmo que o consolidado entre em
+      # retry-storm e consuma a cota da conta, o registro de lançamentos
+      # continua tendo execuções disponíveis. É o controle que sustenta o
+      # requisito não-funcional principal do desafio.
+      ReservedConcurrentExecutions: !Ref ConcorrenciaReservadaLancamentos
       Environment:
         Variables:
           DYNAMODB_TABLE_LANCAMENTOS: !Ref DynamoDBLancamentos
@@ -256,7 +332,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
     DependsOn:
-      - LambdaExecutionRole
+      - LancamentosRole
       - XRayLayer
 
 
@@ -266,7 +342,7 @@ Resources:
       FunctionName: 'consolidado'
       Runtime: python3.10
       Handler: main.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Role: !GetAtt ConsolidadoRole.Arn
       Timeout: 60
       MemorySize: 512
       Environment:
@@ -305,11 +381,81 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
     DependsOn:
-      - LambdaExecutionRole
+      - ConsolidadoRole
       - XRayLayer
       - RedisLayer
 
-  # ===== EVENT SOURCE MAPPING =====
+
+  # ===========================================================================
+  # Lambda Authorizer — autenticação e autorização da API
+  # ===========================================================================
+  # Fecha a lacuna mais grave do projeto: todos os métodos estavam com
+  # AuthorizationType NONE, ou seja, qualquer pessoa com a URL podia registrar
+  # lançamentos e ler o saldo do comerciante.
+  #
+  # Fora da VPC de propósito: só precisa alcançar o Secrets Manager, e manter a
+  # função fora da VPC elimina a latência de ENI na partida a frio — relevante
+  # porque ela roda antes de toda requisição da API.
+  LambdaAuthorizer:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-authorizer'
+      Runtime: python3.10
+      Handler: main.lambda_handler
+      Role: !GetAtt AuthorizerRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          SECRET_NAME: !Ref JwtSecret
+          REGION: !Ref AWS::Region
+          ENVIRONMENT: !Ref Environment
+          JWT_ISSUER: !Sub '${ProjectName}-${Environment}'
+          JWT_AUDIENCE: 'fluxo-de-caixa'
+      TracingConfig:
+        Mode: Active
+      Code:
+        S3Bucket:
+          Ref: S3BucketLambdas
+        S3Key:
+          Ref: S3KeyLambdaAuthorizer
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-authorizer'
+        - Key: Environment
+          Value: !Ref Environment
+    DependsOn:
+      - AuthorizerRole
+
+
+  # ===========================================================================
+  # Log groups declarados explicitamente
+  # ===========================================================================
+  # Sem declaração, o Lambda cria o log group sozinho com retenção infinita.
+  # Declarar aqui permite definir retenção e faz o log ser removido junto com a
+  # stack, em vez de sobreviver órfão e continuar gerando custo.
+  LogGroupLancamentos:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaLancamentos}'
+      RetentionInDays: !Ref RetencaoLogsEmDias
+
+  LogGroupConsolidado:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaConsolidado}'
+      RetentionInDays: !Ref RetencaoLogsEmDias
+
+  LogGroupAuthorizer:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaAuthorizer}'
+      RetentionInDays: !Ref RetencaoLogsEmDias
+
+
+  # ===========================================================================
+  # Event Source Mapping
+  # ===========================================================================
   SQSEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
@@ -317,6 +463,17 @@ Resources:
       FunctionName: !GetAtt LambdaConsolidado.Arn
       BatchSize: 10
       MaximumBatchingWindowInSeconds: 5
+      # Respostas parciais de lote: só as mensagens que falharam voltam para a
+      # fila. Sem isso, uma falha na décima mensagem devolve as dez e as nove já
+      # processadas são processadas de novo — o que, com agregação incremental
+      # (ADR-004), significa contabilizar valores em dobro.
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      # Teto de concorrência do consumidor. Impede que um acúmulo de mensagens
+      # escale o consolidado até drenar a cota de concorrência da conta e deixar
+      # o serviço de lançamentos sem execuções disponíveis.
+      ScalingConfig:
+        MaximumConcurrency: !Ref ConcorrenciaMaximaConsolidado
     DependsOn:
       - LambdaConsolidado
 
@@ -333,3 +490,24 @@ Outputs:
       Fn::GetAtt:
         - LambdaConsolidado
         - Arn
+
+  LambdaAuthorizerArn:
+    Value:
+      Fn::GetAtt:
+        - LambdaAuthorizer
+        - Arn
+
+  # Nomes das funcoes. As dimensoes de alarme do CloudWatch exigem o NOME, nao o
+  # ARN — usar o ARN faz o alarme nunca encontrar a metrica e ficar preso em
+  # INSUFFICIENT_DATA, o que e pior do que nao ter alarme: da falsa seguranca.
+  LambdaLancamentosName:
+    Value:
+      Ref: LambdaLancamentos
+
+  LambdaConsolidadoName:
+    Value:
+      Ref: LambdaConsolidado
+
+  LambdaAuthorizerName:
+    Value:
+      Ref: LambdaAuthorizer

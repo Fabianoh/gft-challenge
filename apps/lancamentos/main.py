@@ -4,14 +4,16 @@ from utils import create_response
 from typing import Dict, Any
 from aws_xray_sdk.core import xray_recorder
 from operacoes import cria_lancamento, get_lancamentos_list, get_lancamento_individual
+from log_seguro import resumir_evento
 
 config = configuration.Config()
 
 @xray_recorder.capture('lambda_handler')
 def lambda_handler(event, context) -> Dict[str, Any]:
     try:
-        # Log da requisição
-        config.logger.info(f"Evento recebido: {json.dumps(event, default=str)}")
+        # Log da requisição — sem cabeçalhos nem corpo: registrar o evento
+        # inteiro gravaria o token Bearer em texto claro no CloudWatch.
+        config.logger.info(f"Requisição recebida: {resumir_evento(event)}")
 
         # Verificar método HTTP
         http_method = event.get('httpMethod', '')
@@ -37,7 +39,7 @@ def lambda_handler(event, context) -> Dict[str, Any]:
                 'message': f'Método {http_method} não é suportado para o recurso {resource_path}'
             })
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro inesperado no handler principal: {e}", exc_info=True)
         return create_response(500, {
             'error': 'Erro interno do servidor',

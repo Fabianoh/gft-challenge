@@ -1,8 +1,9 @@
 import json
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Dict, Any, Optional
 from aws_xray_sdk.core import patch_all
+from excecoes import ValidationError
 
 patch_all()
 
@@ -35,9 +36,14 @@ def validate_lancamento(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     required_fields = ['tipo', 'valor', 'descricao']
 
-    # Verificar campos obrigatórios
+    # Verificar campos obrigatórios.
+    # Não usar `not data[field]`: isso trataria valor=0 como campo ausente e
+    # devolveria "campo obrigatório" quando a resposta correta é "valor deve ser
+    # maior que zero". Mensagem de erro errada custa suporte e confunde o cliente.
     for field in required_fields:
-        if field not in data or not data[field]:
+        if field not in data or data[field] is None:
+            raise ValidationError(f"Campo '{field}' é obrigatório")
+        if isinstance(data[field], (str, list, dict)) and len(data[field]) == 0:
             raise ValidationError(f"Campo '{field}' é obrigatório")
 
     # Validar tipo
@@ -45,12 +51,16 @@ def validate_lancamento(data: Dict[str, Any]) -> Dict[str, Any]:
         raise ValidationError("Tipo deve ser 'DEBITO' ou 'CREDITO'")
 
     # Validar valor
+    # InvalidOperation (herda de ArithmeticError, não de ValueError) é o que
+    # Decimal levanta para texto não numérico. Sem capturá-la, um payload como
+    # {"valor": "abc"} escapava da validação e virava HTTP 500 em vez de 400.
     try:
         valor = Decimal(str(data['valor']))
-        if valor <= 0:
-            raise ValidationError("Valor deve ser maior que zero")
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, InvalidOperation):
         raise ValidationError("Valor deve ser um número válido")
+
+    if valor <= 0:
+        raise ValidationError("Valor deve ser maior que zero")
 
     # Validar descrição
     descricao = str(data['descricao']).strip()

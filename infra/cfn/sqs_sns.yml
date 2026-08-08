@@ -74,3 +74,13 @@ Outputs:
   ConsolidacaoDeadLetterQueue:
     Value:
       Fn::GetAtt: ConsolidacaoDeadLetterQueue.Arn
+
+  # Nomes reais das filas, para as dimensoes de alarme do CloudWatch, que exigem
+  # o nome e nao o ARN nem a URL.
+  ConsolidacaoQueueRealName:
+    Value:
+      Fn::GetAtt: ConsolidacaoQueue.QueueName
+
+  ConsolidacaoDlqRealName:
+    Value:
+      Fn::GetAtt: ConsolidacaoDeadLetterQueue.QueueName

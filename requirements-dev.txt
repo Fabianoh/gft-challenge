@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# Testes
+pytest==8.3.4
+pytest-cov==6.0.0
+
+# Mocks de serviços AWS em memória (não requer conta AWS nem Docker).
+# O extra `server` habilita `python -m moto.server`, usado pela execução local.
+moto[dynamodb,sqs,s3,events,server]==5.0.24
+
+# Congelamento de relógio para testar virada de dia / fuso horário
+freezegun==1.5.1

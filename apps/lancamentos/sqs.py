@@ -43,5 +43,5 @@ def send_to_consolidacao_queue(lancamento_id: str, lancamento_data: Dict[str, An
 
         config.logger.info(f"Mensagem enviada para SQS: {response['MessageId']}")
 
-    except BaseException as e:
+    except Exception as e:
         config.logger.error(f"Erro ao enviar para SQS: {e}")
