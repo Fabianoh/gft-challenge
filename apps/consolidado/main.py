@@ -5,6 +5,7 @@ from aws_xray_sdk.core import patch_all
 from configuration import Config
 from sqs import handle_sqs_event
 from utils import create_response, route_http_request
+from log_seguro import resumir_evento, resumir_evento_sqs
 
 patch_all()
 config = Config()
@@ -13,8 +14,11 @@ config = Config()
 @xray_recorder.capture('lambda_handler')
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
-        # Log da requisição
-        config.logger.info(f"Evento recebido: {json.dumps(event, default=str)}")
+        # Log da requisição — sem cabeçalhos nem corpo (ver log_seguro).
+        config.logger.info(
+            f"Evento recebido: "
+            f"{resumir_evento_sqs(event) if 'Records' in event else resumir_evento(event)}"
+        )
 
         # Verificar tipo de evento
         if 'Records' in event:

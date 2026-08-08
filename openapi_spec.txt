@@ -25,7 +25,6 @@ info:
   version: 1.0.0
 
 security:
-  - ApiKeyAuth: []
   - BearerAuth: []
 
 paths:
@@ -34,7 +33,13 @@ paths:
       tags:
         - System
       summary: Health Check
-      description: Verifica o status de saúde da API e seus componentes
+      description: |
+        Confirma que o API Gateway está no ar.
+
+        ATENÇÃO: é uma integração MOCK e responde sempre `healthy`, sem
+        verificar DynamoDB, SQS ou Redis. Não use como sonda de
+        dependências — um health check que nunca falha engana o
+        monitoramento. Ver docs/06-observabilidade.md.
       operationId: healthCheck
       security: []
       responses:
@@ -363,16 +368,23 @@ paths:
 
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: API Key para autenticação
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Token JWT para autenticação
+      description: |
+        Token JWT validado por Lambda Authorizer, que confere assinatura,
+        emissor, audiência, expiração e o escopo exigido pelo recurso.
+
+        Escopos:
+          - `lancamentos:write` — POST /lancamentos
+          - `lancamentos:read`  — GET /lancamentos, GET /lancamentos/{id}
+          - `consolidado:read`  — GET /consolidado, GET /consolidado/relatorio
+          - `metricas:read`     — GET /metricas
+
+        Um token com apenas `lancamentos:write` registra vendas mas recebe 403
+        ao consultar o saldo. Para gerar um token de teste:
+        `python scripts/gerar_token.py`
 
   schemas:
     # Requests
@@ -419,13 +431,6 @@ components:
           maxItems: 10
           description: Tags para classificação
           example: ["cliente-vip", "pagamento-antecipado"]
-        metadata:
-          type: object
-          additionalProperties: true
-          description: Dados adicionais em formato chave-valor
-          example:
-            cliente_id: "12345"
-            pedido_id: "PED-001"
 
     # Core Models
     Lancamento:
@@ -459,9 +464,6 @@ components:
           items:
             type: string
           example: ["cliente-vip"]
-        metadata:
-          type: object
-          additionalProperties: true
         data_criacao:
           type: string
           format: date-time
@@ -842,9 +844,6 @@ components:
         descricao: "Pagamento recebido do cliente ABC"
         categoria: "VENDAS"
         tags: ["cliente-vip", "pagamento-antecipado"]
-        metadata:
-          cliente_id: "12345"
-          vendedor_id: "67890"
 
     LancamentoDebito:
       summary: Lançamento de Débito
