@@ -641,8 +641,20 @@ Resources:
 
         # Lancamentos: cota propria e mais alta. E o caminho de receita — uma
         # venda nao registrada e irrecuperavel.
+        #
+        # O metodo HTTP precisa ser nomeado. O API Gateway so aceita curinga na
+        # combinacao '/*' + '*'; usar '*' com um ResourcePath especifico produz
+        # um caminho invalido ('lancamentos/*') e a criacao do stage falha.
         - ResourcePath: '/lancamentos'
-          HttpMethod: '*'
+          HttpMethod: 'POST'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref LimiteRpsLancamentos
+          ThrottlingBurstLimit: !Ref LimiteRpsLancamentos
+
+        - ResourcePath: '/lancamentos'
+          HttpMethod: 'GET'
           LoggingLevel: INFO
           DataTraceEnabled: false
           MetricsEnabled: true
@@ -650,7 +662,7 @@ Resources:
           ThrottlingBurstLimit: !Ref LimiteRpsLancamentos
 
         - ResourcePath: '/lancamentos/{id}'
-          HttpMethod: '*'
+          HttpMethod: 'GET'
           LoggingLevel: INFO
           DataTraceEnabled: false
           MetricsEnabled: true
@@ -660,7 +672,7 @@ Resources:
         # Consolidado: cota separada, dimensionada para os 50 rps do requisito
         # nao-funcional com folga. Um pico aqui nao consome a cota acima.
         - ResourcePath: '/consolidado'
-          HttpMethod: '*'
+          HttpMethod: 'GET'
           LoggingLevel: INFO
           DataTraceEnabled: false
           MetricsEnabled: true
@@ -668,7 +680,7 @@ Resources:
           ThrottlingBurstLimit: !Ref LimiteRpsConsolidado
 
         - ResourcePath: '/consolidado/relatorio'
-          HttpMethod: '*'
+          HttpMethod: 'GET'
           LoggingLevel: INFO
           DataTraceEnabled: false
           MetricsEnabled: true
