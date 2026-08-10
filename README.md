@@ -241,7 +241,12 @@ Os `.zip` são gerados em `infra/lambdas/` e **não são versionados** — biná
 repositório impede build reproduzível, porque não há garantia de que o pacote
 corresponda ao código. Este passo é obrigatório.
 
-**2.** Crie um bucket e envie templates e pacotes:
+**2.** Crie um bucket de artefatos e envie templates e pacotes.
+
+O CloudFormation não lê arquivos locais: ele busca os templates aninhados e os
+pacotes das Lambdas por HTTP no S3. Este bucket é só de implantação — não se
+confunde com o bucket que a própria stack cria para arquivar relatórios. O nome
+é livre, desde que o mesmo valor vá em `BucketCFN`:
 
 ```bash
 aws s3 sync . s3://<NOME_BUCKET> --exclude ".venv/*" --exclude ".git/*" --exclude "dist/*"

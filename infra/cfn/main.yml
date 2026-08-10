@@ -172,10 +172,16 @@ Resources:
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${BucketCFN}/infra/cfn/lambdas.yml"
       Parameters:
-        ProjectName: 
+        ProjectName:
           Ref: ProjectName
         Environment:
           Ref: Environment
+        # Os pacotes .zip das funcoes ficam no mesmo bucket dos templates.
+        # Sem repassar isto, lambdas.yml cai no seu Default ('gft-challenge') e o
+        # CloudFormation procura o codigo num bucket que provavelmente nao e o
+        # seu — o deploy falha com "Error occurred while GetObject".
+        S3BucketLambdas:
+          Ref: BucketCFN
         KMSKey:
           Fn::GetAtt:
             - KmsStack
