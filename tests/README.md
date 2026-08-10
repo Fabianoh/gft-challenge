@@ -101,7 +101,7 @@ Verifica o único requisito do enunciado com meta numérica:
 > segundo, com no máximo 5% de perda."*
 
 ```bash
-API_URL=https://<id>.execute-api.<regiao>.amazonaws.com/prod python tarefas.py carga
+API_URL=https://<id>.execute-api.<regiao>.amazonaws.com/dev python tarefas.py carga
 ```
 
 O cenário usa `constant-arrival-rate`, que mantém a taxa de chegada fixa mesmo

@@ -15,12 +15,31 @@ Parameters:
   CidrBlock:
     Type: String
     Default: '10.0.0.0/16'
+    Description: Faixa de enderecos da VPC
 
   AlertEmail:
     Type: String
+    Description: >-
+      E-mail que recebe os alarmes do CloudWatch (DLQ, defasagem do saldo,
+      throttling). ATENCAO: a AWS envia uma mensagem de confirmacao para este
+      endereco assim que a stack sobe, com assunto "AWS Notification -
+      Subscription Confirmation". E preciso clicar em "Confirm subscription" —
+      enquanto isso nao for feito, os alarmes disparam mas nao notificam
+      ninguem. Use um endereco ao qual voce tenha acesso.
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: Informe um endereco de e-mail valido
 
   BucketCFN:
     Type: String
+    Description: >-
+      Nome do bucket S3 que ja contem os templates e os pacotes .zip das
+      Lambdas. Precisa existir ANTES de criar a stack e ter recebido o
+      'aws s3 sync' do repositorio. Nome de bucket S3 e global e so aceita
+      minusculas.
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: >-
+      Nome de bucket S3 valido: minusculas, numeros, ponto e hifen, 3 a 63
+      caracteres
 
   CacheNodeType:
       Type: String

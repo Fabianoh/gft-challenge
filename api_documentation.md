@@ -48,7 +48,7 @@ não envia `Authorization` no preflight).
 **Para obter um token de teste:**
 
 ```bash
-python scripts/gerar_token.py --projeto gft-challenge --ambiente prod
+python scripts/gerar_token.py
 ```
 
 Restringindo escopos, para demonstrar a autorização por capacidade:

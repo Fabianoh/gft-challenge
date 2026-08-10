@@ -9,7 +9,7 @@ que o Lambda Authorizer valida.
 
 Uso — buscando o segredo direto do Secrets Manager (precisa de credencial AWS):
 
-    python scripts/gerar_token.py --projeto gft-challenge --ambiente prod
+    python scripts/gerar_token.py
 
 Uso — informando o segredo manualmente:
 
@@ -65,8 +65,10 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--projeto", default="gft-challenge")
-    parser.add_argument("--ambiente", default="prod")
+    parser.add_argument("--projeto", default="gft-challenge-fluxo-caixa",
+                        help="deve casar com o ProjectName da stack")
+    parser.add_argument("--ambiente", default="dev",
+                        help="deve casar com o Environment da stack")
     parser.add_argument("--segredo", help="valor do segredo; se omitido, busca no Secrets Manager")
     parser.add_argument("--emissor", help="padrão: <projeto>-<ambiente>")
     parser.add_argument("--audiencia", default="fluxo-de-caixa")

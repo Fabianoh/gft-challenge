@@ -228,56 +228,162 @@ python tarefas.py lacunas
 
 ## Implantação na AWS
 
-**Pré-requisitos:** conta AWS ativa, AWS CLI configurado, e uma role de execução
-para o CloudFormation com permissão de criar os recursos.
+> **Não é necessário implantar para avaliar o projeto.** A suíte de 139 testes e
+> o ambiente local completo rodam sem conta AWS — veja
+> [Como rodar localmente](#como-rodar-localmente). Esta seção é para quem quiser
+> ver o sistema no ar.
 
-**1.** Empacote as funções e as camadas:
+### Antes de começar
+
+**Pré-requisitos:** conta AWS ativa, AWS CLI configurado (`aws configure`) e
+Python 3.10+.
+
+**Custo.** A stack provisiona recursos que cobram por hora, rodando 24/7,
+independentemente de haver tráfego:
+
+| Recurso | Custo mensal aproximado |
+|---|---|
+| ElastiCache Redis (2 nós `cache.t3.micro`) | US$ 25 |
+| NAT Gateway | US$ 33 |
+| WAF | US$ 8 |
+| KMS + Secrets Manager | US$ 2 |
+| **Total fixo** | **≈ US$ 68/mês** |
+
+Um dia de testes custa cerca de US$ 2. **Destrua a stack ao terminar** — o
+comando está no fim desta seção. Esse custo fixo é justamente o ponto levantado
+em [estimativa de custos](docs/05-estimativa-custos.md): numa arquitetura
+"serverless", quase toda a conta em baixo volume vem de componentes que rodam
+o tempo todo.
+
+**Tempo:** cerca de 20 minutos. São 12 stacks aninhadas criadas em sequência, e
+o ElastiCache sozinho leva uns 10 minutos.
+
+---
+
+### 1. Empacote as funções e as camadas
 
 ```bash
 python tarefas.py empacotar
 ```
 
-Os `.zip` são gerados em `infra/lambdas/` e **não são versionados** — binário no
-repositório impede build reproduzível, porque não há garantia de que o pacote
-corresponda ao código. Este passo é obrigatório.
+Gera cinco `.zip` em `infra/lambdas/`. **Este passo é obrigatório:** os pacotes
+não são versionados, porque binário no repositório impede build reproduzível —
+não há garantia de que o `.zip` corresponda ao código que está no git.
 
-**2.** Crie um bucket de artefatos e envie templates e pacotes.
+### 2. Crie o bucket de artefatos
 
-O CloudFormation não lê arquivos locais: ele busca os templates aninhados e os
-pacotes das Lambdas por HTTP no S3. Este bucket é só de implantação — não se
-confunde com o bucket que a própria stack cria para arquivar relatórios. O nome
-é livre, desde que o mesmo valor vá em `BucketCFN`:
+O CloudFormation não lê arquivos do seu disco: ele busca os templates aninhados
+e os pacotes das Lambdas por HTTP no S3.
 
-```bash
-aws s3 sync . s3://<NOME_BUCKET> --exclude ".venv/*" --exclude ".git/*" --exclude "dist/*"
-```
-
-**3.** Crie a stack:
+> Escolha um nome **só com letras minúsculas** e **único no mundo** — o espaço de
+> nomes do S3 é global. Ex.: `gft-challenge-deploy-seunome`.
 
 ```bash
-aws cloudformation create-stack --stack-name gft-challenge --template-url https://s3.amazonaws.com/<NOME_BUCKET>/infra/cfn/main.yml --parameters ParameterKey=AlertEmail,ParameterValue=<SEU_EMAIL> ParameterKey=BucketCFN,ParameterValue=<NOME_BUCKET> --capabilities CAPABILITY_NAMED_IAM
-```
-
-A stack `main.yml` orquestra stacks aninhadas: rede, security groups, KMS,
-DynamoDB, buckets, SQS/SNS, Redis, Secrets, Lambdas, API Gateway e
-observabilidade.
-
-**4.** A API implantada exige autenticação. Gere um token para testá-la:
-
-```bash
-python scripts/gerar_token.py --projeto gft-challenge --ambiente prod
+aws s3 mb s3://SEU-BUCKET
 ```
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" "https://<api-id>.execute-api.<regiao>.amazonaws.com/prod/consolidado"
+aws s3 sync . s3://SEU-BUCKET --exclude ".venv/*" --exclude ".git/*" --exclude "dist/*"
 ```
 
-Para ver a autorização por escopo em ação, gere um token restrito — ele registra
-lançamento mas recebe **403** ao tentar ler o saldo:
+Este bucket é só de implantação. Não confundir com o bucket que a própria stack
+cria para arquivar relatórios.
+
+### 3. Crie a stack
+
+Substitua `SEU-BUCKET` e `voce@exemplo.com`:
+
+```bash
+aws cloudformation create-stack --stack-name gft-challenge --template-url https://s3.amazonaws.com/SEU-BUCKET/infra/cfn/main.yml --parameters ParameterKey=AlertEmail,ParameterValue=voce@exemplo.com ParameterKey=BucketCFN,ParameterValue=SEU-BUCKET --capabilities CAPABILITY_NAMED_IAM
+```
+
+| Parâmetro | Para que serve |
+|---|---|
+| `AlertEmail` | Recebe os alarmes do CloudWatch — DLQ, defasagem do saldo, throttling. Ver aviso abaixo |
+| `BucketCFN` | O bucket do passo 2, de onde o CloudFormation busca templates e pacotes |
+
+> ### ⚠️ Você vai receber um e-mail da AWS
+>
+> Poucos minutos após criar a stack, o endereço informado em `AlertEmail` recebe
+> uma mensagem com assunto **"AWS Notification — Subscription Confirmation"**.
+>
+> **É preciso clicar em "Confirm subscription".** Sem isso a inscrição fica
+> pendente: os alarmes continuam disparando, mas não notificam ninguém.
+>
+> Não é spam nem cobrança — é o SNS confirmando que o endereço aceita receber os
+> alertas. Se preferir não confirmar, tudo funciona igual; você só não recebe as
+> notificações.
+
+### 4. Acompanhe a criação
+
+```bash
+aws cloudformation describe-stacks --stack-name gft-challenge --query "Stacks[0].StackStatus" --output text
+```
+
+Repita até aparecer `CREATE_COMPLETE`. Se aparecer `ROLLBACK_*` ou
+`CREATE_FAILED`, este comando mostra a causa:
+
+```bash
+aws cloudformation describe-stack-events --stack-name gft-challenge --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[LogicalResourceId,ResourceStatusReason]" --output table
+```
+
+### 5. Obtenha a URL da API
+
+```bash
+aws cloudformation describe-stacks --stack-name gft-challenge --query "Stacks[0].Outputs" --output table
+```
+
+### 6. Gere um token e chame a API
+
+A API exige autenticação — sem token, todo endpoint de negócio responde **401**.
+
+```bash
+python scripts/gerar_token.py
+```
+
+O script lê o segredo de assinatura do Secrets Manager (criado pela stack) e
+imprime um token válido por uma hora. Use-o no cabeçalho:
+
+```bash
+curl -H "Authorization: Bearer SEU-TOKEN" "https://SEU-ID.execute-api.us-east-1.amazonaws.com/dev/consolidado"
+```
+
+Para ver a **autorização por escopo** em ação, gere um token restrito. Ele
+registra lançamento, mas recebe **403** ao tentar ler o saldo — é o que impede
+que um PDV comprometido exponha a posição financeira do comerciante:
 
 ```bash
 python scripts/gerar_token.py --escopos lancamentos:write
 ```
+
+### 7. Destrua a stack ao terminar
+
+```bash
+aws cloudformation delete-stack --stack-name gft-challenge
+```
+
+O bucket de artefatos precisa ser esvaziado e removido à parte:
+
+```bash
+aws s3 rb s3://SEU-BUCKET --force
+```
+
+> O bucket de relatórios criado pela stack tem versionamento habilitado e pode
+> impedir a exclusão se contiver objetos. Nesse caso, esvazie-o pelo console e
+> repita o `delete-stack`.
+
+---
+
+### Resolução de problemas
+
+| Sintoma | Causa provável |
+|---|---|
+| `Error occurred while GetObject` nas Lambdas | O passo 1 não foi executado, ou o `BucketCFN` não é o mesmo bucket do `sync` |
+| `S3 error: Access Denied` ao criar a stack | Os templates não foram enviados, ou o nome do bucket está errado |
+| Nenhum alarme chega por e-mail | A inscrição do SNS não foi confirmada (ver passo 3) |
+| Todo endpoint responde 401 | Falta o cabeçalho `Authorization`, ou o token expirou (validade de 1 hora) |
+| 403 num endpoint específico | O token não tem o escopo exigido — é o comportamento esperado |
+| A stack demora mais de 25 min | Normal se o ElastiCache ainda estiver criando; confira o status pelo passo 4 |
 
 ---
 
