@@ -263,9 +263,18 @@ Resources:
           tipo:
             type: string
             enum: ['DEBITO', 'CREDITO']
+          # Aceita numero e string. A documentacao recomenda enviar como string
+          # ("1500.50") porque um numero JSON e desserializado como ponto
+          # flutuante e ja chega com a precisao comprometida — inaceitavel em
+          # valor monetario. Exigir apenas `number` fazia o gateway rejeitar,
+          # com 400 "Invalid request body", justamente o formato recomendado.
+          #
+          # `minimum` so se aplica a numeros e `pattern` so a strings, entao as
+          # duas restricoes convivem sem conflito.
           valor:
-            type: number
+            type: [number, string]
             minimum: 0.01
+            pattern: '^[0-9]+(\.[0-9]{1,2})?$'
           descricao:
             type: string
             minLength: 1

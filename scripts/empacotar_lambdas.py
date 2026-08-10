@@ -22,12 +22,22 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 SERVICOS = ("lancamentos", "consolidado", "authorizer")
 
+# Devem casar com o Runtime declarado em infra/cfn/lambdas.yml e com a
+# arquitetura em que o Lambda executa.
+RUNTIME_PYTHON = "3.10"
+PLATAFORMA_LAMBDA = "manylinux2014_x86_64"
+
 # Dependências por camada (layer). Mantidas fora do pacote da função para que o
 # código da aplicação, que muda com frequência, suba sem rebaixar o cache das
 # bibliotecas, que quase não mudam.
 CAMADAS = {
     "xray": ["aws-xray-sdk==2.14.0"],
-    "redis": ["redis==5.2.1"],
+    # `async-timeout` é declarado explicitamente, e não deixado para o resolvedor.
+    # O redis 5.x o exige com o marcador `python_full_version < "3.11.3"`; o
+    # `--python-version 3.10` do pip não satisfaz marcadores de versão completa
+    # de forma confiável, e a dependência sumia silenciosamente do pacote. O
+    # runtime só acusava na primeira invocação, com ImportModuleError.
+    "redis": ["redis==5.2.1", "async-timeout>=4.0.3"],
 }
 
 
@@ -54,7 +64,23 @@ def empacotar_camada(nome, pacotes, destino):
         alvo = Path(temporario) / "python"
         resultado = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--quiet",
-             "--target", str(alvo), *pacotes],
+             "--target", str(alvo),
+             # A camada precisa refletir o ambiente do Lambda, não o da máquina
+             # que empacota. Sem isto, dois defeitos aparecem só em produção:
+             #
+             # 1. Dependência condicional some. O `redis` declara `async-timeout`
+             #    apenas para Python < 3.11; empacotando num 3.12+ o pip avalia a
+             #    condição contra a versão local, não instala, e o runtime 3.10
+             #    falha com ImportModuleError.
+             # 2. Binário da plataforma errada. Pacotes com extensão compilada
+             #    (wrapt, do aws-xray-sdk) trariam a build de Windows ou macOS
+             #    para dentro de uma função que roda em Linux.
+             "--python-version", RUNTIME_PYTHON,
+             "--platform", PLATAFORMA_LAMBDA,
+             # --python-version e --platform exigem que nada seja compilado na
+             # hora: só wheels prontas para o alvo.
+             "--only-binary=:all:",
+             *pacotes],
             capture_output=True, text=True,
         )
         if resultado.returncode != 0:
