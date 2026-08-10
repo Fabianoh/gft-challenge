@@ -8,8 +8,13 @@
  * verificado com número — não com afirmação em documento.
  *
  * Execução:
- *   k6 run -e API_URL=https://<id>.execute-api.<regiao>.amazonaws.com/prod \
+ *   k6 run -e API_URL=https://<id>.execute-api.<regiao>.amazonaws.com/dev \
+ *          -e TOKEN=$(python scripts/gerar_token.py | grep ^eyJ) \
  *          tests/carga/consolidado-50rps.js
+ *
+ * O token é obrigatório: a API exige autenticação e sem ele o teste mede apenas
+ * a velocidade com que o gateway devolve 401. O token vale uma hora — mais que
+ * suficiente para os 3 minutos do cenário.
  *
  * O cenário usa `constant-arrival-rate`: o k6 mantém a taxa de chegada fixa em
  * 50 rps independentemente do tempo de resposta. Isso é essencial — um cenário
@@ -22,6 +27,17 @@ import { check } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
 const API_URL = __ENV.API_URL;
+const TOKEN = __ENV.TOKEN;
+
+if (!API_URL) {
+  throw new Error('Defina API_URL: -e API_URL=https://<id>.execute-api.<regiao>.amazonaws.com/dev');
+}
+if (!TOKEN) {
+  throw new Error(
+    'Defina TOKEN. Sem token a API responde 401 e o teste mede a rejeicao, ' +
+    'nao o servico. Gere um com: python scripts/gerar_token.py'
+  );
+}
 
 const perdaDeRequisicoes = new Rate('perda_de_requisicoes');
 const latenciaSaldoDiario = new Trend('latencia_saldo_diario', true);
@@ -63,12 +79,19 @@ function dataAleatoria() {
 
 export default function () {
   const resposta = http.get(`${API_URL}/consolidado?data=${dataAleatoria()}`, {
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${TOKEN}`,
+    },
     tags: { endpoint: 'consolidado_saldo_diario' },
   });
 
   const ok = check(resposta, {
     'status 200': (r) => r.status === 200,
+    // 401 e 403 em massa indicam token invalido ou expirado, nao degradacao do
+    // servico. Sem esta distincao, um token errado se disfarcaria de falha de
+    // capacidade e levaria a conclusao oposta sobre o requisito.
+    'nao e falha de autenticacao': (r) => r.status !== 401 && r.status !== 403,
     'corpo tem saldo_final': (r) => {
       try {
         return r.json('data.saldo_final') !== undefined;
@@ -87,6 +110,7 @@ export function handleSummary(data) {
   const p95 = data.metrics.http_req_duration?.values['p(95)'] ?? 0;
   const p99 = data.metrics.http_req_duration?.values['p(99)'] ?? 0;
   const total = data.metrics.http_reqs?.values?.count ?? 0;
+  const throttled = data.metrics['http_req_failed']?.values?.passes ?? 0;
 
   const relatorio = `
 RESULTADO — NFR "50 rps com no máximo 5% de perda"
