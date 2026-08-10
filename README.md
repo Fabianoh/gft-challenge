@@ -235,8 +235,39 @@ python tarefas.py lacunas
 
 ### Antes de começar
 
-**Pré-requisitos:** conta AWS ativa, AWS CLI configurado (`aws configure`) e
-Python 3.10+.
+**Pré-requisitos:**
+
+| | |
+|---|---|
+| Repositório clonado | `git clone https://github.com/Fabianoh/gft-challenge.git` |
+| Python | 3.10 ou superior |
+| AWS CLI | v2, configurado com `aws configure` |
+| Região | Definida no perfil, ou passada com `--region` em cada comando |
+| Permissões | Amplas — a stack cria IAM roles nomeadas, VPC, NAT, ElastiCache, WAF, entre outros |
+
+**Confirme que o CLI está pronto:**
+
+```bash
+aws sts get-caller-identity
+```
+
+```bash
+aws configure get region
+```
+
+Se o segundo comando não devolver nada, defina a região — sem ela **todo comando
+`aws` abaixo falha** com *"You must specify a region"*:
+
+```bash
+aws configure set region us-east-1
+```
+
+**Sobre as permissões.** A stack provisiona recursos de doze serviços diferentes
+e cria IAM roles com nome fixo, o que exige `CAPABILITY_NAMED_IAM`. Na prática é
+preciso um usuário com permissões administrativas, ou uma política que cubra
+CloudFormation, IAM, EC2/VPC, Lambda, API Gateway, DynamoDB, S3, SQS, SNS,
+ElastiCache, KMS, Secrets Manager, CloudWatch e WAFv2. Um usuário com permissões
+parciais falha no meio da criação e dispara rollback.
 
 **Custo.** A stack provisiona recursos que cobram por hora, rodando 24/7,
 independentemente de haver tráfego:
