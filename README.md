@@ -24,6 +24,7 @@ O README é a porta de entrada. O detalhamento arquitetural está em `docs/`.
 | [ADR-004 — Agregação incremental](docs/adr/0004-agregacao-incremental-vs-recalculo.md) | Por que o desenho atual não atende 50 rps e como corrigir |
 | [ADR-005 — Consistência eventual](docs/adr/0005-consistencia-eventual.md) | O trade-off imposto pelo requisito de isolamento |
 | [Estratégia de testes](tests/README.md) | Camadas, cobertura, lacunas conhecidas, teste de carga |
+| [Resultado do teste de carga](tests/carga/RESULTADO.md) | Medição do NFR de 50 rps contra a stack implantada |
 | [Documentação da API](api_documentation.md) | Endpoints, payloads, códigos de retorno |
 
 ---

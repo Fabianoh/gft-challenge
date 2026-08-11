@@ -43,6 +43,9 @@ const perdaDeRequisicoes = new Rate('perda_de_requisicoes');
 const latenciaSaldoDiario = new Trend('latencia_saldo_diario', true);
 
 export const options = {
+  // p99 não é coletado por padrão; sem declarar aqui, o resumo imprime 0 ms.
+  summaryTrendStats: ['min', 'avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
+
   scenarios: {
     pico_consolidado: {
       executor: 'constant-arrival-rate',
